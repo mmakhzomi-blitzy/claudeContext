@@ -30,7 +30,7 @@ kubectl patch clusterrolebinding blitzy-client-cloudnative-pg \
   -p='[{"op":"replace","path":"/subjects/0/namespace","value":"blitzy-client"}]'
 ```
 
-For (2): manually applied a comprehensive Role + RoleBinding to the operator namespace. Saved at `/Users/axe/Downloads/cnpg-operator-role.yaml`. Final form ends up wildcarded (`apiGroups: ["*"]`, `resources: ["*"]`, `verbs: ["*"]`) for the namespace Role + ClusterRole for cluster-scoped resources (webhook configs, CRDs, nodes).
+For (2): manually applied a comprehensive Role + RoleBinding to the operator namespace. Saved at `/Users/m.makhzomi/Downloads/cnpg-operator-role.yaml`. Final form ends up wildcarded (`apiGroups: ["*"]`, `resources: ["*"]`, `verbs: ["*"]`) for the namespace Role + ClusterRole for cluster-scoped resources (webhook configs, CRDs, nodes).
 
 ### Related quirks to know
 - `resourceNames: ["*"]` in a Role rule does **not** wildcard — it's exact-string match for a resource literally named `*`. Use `resources: ["*"]` instead, or omit `resourceNames` entirely.
