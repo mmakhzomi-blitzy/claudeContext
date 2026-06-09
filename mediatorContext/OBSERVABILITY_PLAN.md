@@ -152,7 +152,7 @@ Load-bearing decision before any code:
 
 ## 8. File-level changes (when we proceed)
 
-### Mediator (`/Users/axe/blitzy/archie-client-mediator`)
+### Mediator (`/Users/m.makhzomi/Projects/archie-client-mediator`)
 
 | Change | File | Effort |
 |---|---|---|
@@ -168,7 +168,7 @@ Load-bearing decision before any code:
 | Preserve `client_id` through disconnect | `src/services/ws_client.py` — don't clear on disconnect, only on re-register | 1 hour |
 | `/otlp` endpoint accept metrics + traces (currently logs only) | `src/api/routes/otlp.py` | 2 hours |
 
-### Relay (`/Users/axe/blitzy/archie-service-relay`)
+### Relay (`/Users/m.makhzomi/Projects/archie-service-relay`)
 
 | Change | File | Effort |
 |---|---|---|
@@ -181,7 +181,7 @@ Load-bearing decision before any code:
 | New `/metrics`, `/traces` namespaces (or `/telemetry`) | `src/namespaces/` | 1-2 days |
 | Forward OTLP to a relay-side OTel collector (Option 3) | new namespace handler + deploy collector alongside relay | 2-3 days |
 
-### Helm chart (`/Users/axe/blitzy/archie-helm-chart/blitzy-client/chart`)
+### Helm chart (`/Users/m.makhzomi/Projects/archie-helm-chart/blitzy-client/chart`)
 
 | Change | File | Effort |
 |---|---|---|
