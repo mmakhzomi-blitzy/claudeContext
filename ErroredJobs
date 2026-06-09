@@ -1,0 +1,196 @@
+use gcloud to analyze the log using the following filter:                                                                                                                                                                                                                                                                                                                                                                                                              
+  resource.type="k8s_container"                                                                                                                                                                                                                                                                                                                                                                                                                                          
+  resource.labels.project_id="blitzy-platform-prod"                                                                                                                                                                                                                                                                                                                                                                                                                      
+  resource.labels.location="us-central1-a"                                                                                                                                                                                                                                                                                                                                                                                                                               
+  resource.labels.cluster_name="blitzy-internal"                                                                                                                                                                                                                                                                                                                                                                                                                         
+  resource.labels.namespace_name="default"                                                                                                                                                                                                                                                                                                                                                                                                                               
+  labels.k8s-pod/batch_kubernetes_io/controller-uid="3b111d90-0793-4eb2-be1b-583040db867b"                                                                                                                                                                                                                                                                                                                                                                               
+  severity>=DEFAULT   
+
+
+  GHES QA Issue:
+  Status after your DB update + retrigger: still failing, identically. New pod -6657c866whv7 (started 02:18) is already back in the retry loop — /access_token returns the same 502 → GHES 404 → installation_id=130, clone dir empty. So whatever you changed didn't alter the token exchange.
+
+  GHES installation tables (common_models db_model)
+
+  Two tables are involved in the token exchange that's 404ing. The relevant row is keyed by installation_id=130 / hostname=azure-ghes.blitzystage.com.
+
+  1. github_installations — the installation record (GithubInstallation)
+
+  This holds the installation_id (130) that the mediator puts into POST /app/installations/{id}/access_tokens.
+
+  ┌────────────────────────┬───────────────────────────┬──────────────────────────────────────────────────────┐
+  │         Column         │           Type            │                        Notes                         │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ id                     │ String (PK, UUID)         │ matches scm_installation_id UUID                     │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ installation_id        │ String(100)               │ GHES's numeric install id → "130"                    │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ installation_type      │ Enum                      │ ORGANIZATION / USER                                  │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ status                 │ Enum                      │ PENDING/ACTIVE/REJECTED/UNINSTALLED/SUSPENDED/FAILED │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ target_name            │ String(255)               │ org/user (e.g. lakshya)                              │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ target_id              │ String(100)               │ GitHub org_id/user_id                                │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ svc_type               │ Enum VersionControlSystem │ GITHUB_ENTERPRISE_SERVER                             │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ installation_metadata  │ JSONB                     │ raw GitHub install response                          │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ repository_selection   │ String                    │ all / selected                                       │
+  ├────────────────────────┼───────────────────────────┼──────────────────────────────────────────────────────┤
+  │ is_deleted, deleted_at │ soft-delete               │                                                      │
+  └────────────────────────┴───────────────────────────┴──────────────────────────────────────────────────────┘
+  
+  2. ghes_apps — the GHES App credentials, per hostname (GHESApp)
+
+  This is what signs the JWT to authenticate the token request. A wrong app_id/key here produces a 404 because GHES looks for installation 130 under that app and doesn't find it.
+
+  ┌────────────┬──────────────────────┬───────────────────────────────────────────────────────────────────────┐
+  │   Column   │         Type         │                                 Notes                                 │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ id         │ String (PK, UUID)    │                                                                       │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ hostname   │ String(500), indexed │ azure-ghes.blitzystage.com                                            │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ app_id     │ String(100)          │ GitHub App ID (signs the JWT)                                         │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ app_slug   │ String(255)          │                                                                       │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ client_id  │ String(255)          │                                                                       │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ html_url   │ String(1000)         │                                                                       │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ secret_key │ String(500)          │ reference to private key (PEM) in Secret Manager — not the key itself │
+  ├────────────┼──────────────────────┼───────────────────────────────────────────────────────────────────────┤
+  │ status     │ String(50)           │ default ACTIVE                                                        │
+  └────────────┴──────────────────────┴───────────────────────────────────────────────────────────────────────┘
+  
+  Both defined in common_models/models.py (github_installations ~L632, ghes_apps ~L691).
+
+  What to check, given it still 404s
+
+  A 404 on /app/installations/130/access_tokens means GHES can't match installation 130 to the app you're authenticating as. So:
+
+  1. github_installations.installation_id — is 130 actually the current numeric install id on GHES? If the app was reinstalled, GHES issues a new id and 130 is stale. Verify against the GHES UI (org lakshya → Settings → GitHub Apps → installed app → the URL …/installations/<id>).
+  2. ghes_apps for azure-ghes.blitzystage.com — does app_id + the PEM behind secret_key belong to the same app that installation 130 lives under? A mismatched app↔installation pair returns exactly this 404. The PEM itself lives in Secret Manager (key = secret_key), so a DB-only edit won't fix a wrong/rotated private key.
+  3. status — if it's UNINSTALLED/SUSPENDED, the app needs reinstalling on the GHES org.
+
+  Want me to query Postgres directly (blitzy-postgres-0 in the cluster) to dump the actual github_installations row for installation 130 and the ghes_apps row for that hostname, so we can see what your update wrote vs. what GHES expects?
+
+  Re: "keep checking" — the token endpoint fails instantly and deterministically (not a slow/eventual thing), so polling on a timer won't tell us anything new until the install/app config is corrected. I'll re-check the moment you make another change — just say the word (or I can pull the actual DB rows now to pinpoint the mismatch).
+
+✻ Cogitated for 2m 5s
+
+❯ can you check again now                                                                                                                                                                                                                                                                                                                                                                                                                         
+
+⏺ Bash(NS=blitzy-client
+      echo "=== worker pods for this job ==="; kubectl get pods -n $NS 2>&1 | grep -E "58b4d1b9|NAME"…)
+  ⎿  === worker pods for this job ===
+     NAME                                                              READY   STATUS             RESTARTS          AGE
+     blitzy-worker-58b4d1b9-29de-44e8-9aab-7d3c19e51c1a-6657c866whv7   1/1     Running            0                 19m
+     … +10 lines (ctrl+o to expand)
+     
+⏺ Still failing — same 502 → GHES 404 → installation_id=130. The current pod is now 19 min into its retry loop (will hard-fail around the 35‑min mark again), clone dir still empty. Your DB change hasn't affected the token exchange.
+
+  Let me just pull the actual DB rows so we can see exactly what's there vs. what GHES expects.
+
+⏺ Bash(NS=blitzy-client
+      echo "=== postgres pod env (db name/user) ==="; kubectl exec -n $NS blitzy-postgres-0 -- sh -c 'env | grep -iE "POSTGRES_(DB|USER|PASSWORD)"' 2…)
+  ⎿  === postgres pod env (db name/user) ===
+     POSTGRES_PASSWORD=changeme
+     POSTGRES_USER=blitzy
+     POSTGRES_DB=blitzy
+  
+⏺ Bash(NS=blitzy-client
+      echo "=== github_installations rows for installation_id 130 / GHES ==="; kubectl exec -n $NS blitzy-postgres-0 -- psql -U blitzy -d blitzy -P p…)
+  ⎿  Error: Exit code 1
+     === github_installations rows for installation_id 130 / GHES ===
+     ERROR:  relation "github_installations" does not exist
+     LINE 1: ...svc_type, is_deleted, created_at, updated_at FROM github_ins...
+                                                                  ^
+     command terminated with exit code 1
+     === ghes_apps for azure-ghes.blitzystage.com ===
+     ERROR:  relation "ghes_apps" does not exist
+     LINE 1: ..., status, is_deleted, created_at, updated_at FROM ghes_apps ...
+                                                                  ^
+     … +1 line (ctrl+o to expand)
+
+⏺ Tables aren't in the default search path. Let me locate them.
+
+⏺ Bash(NS=blitzy-client
+      echo "=== databases ==="; kubectl exec -n $NS blitzy-postgres-0 -- psql -U blitzy -d blitzy -P pager=off -c "\l" 2>&1 | head -20…)
+  ⎿  === databases ===
+                                                      List of databases
+        Name    | Owner  | Encoding | Locale Provider |  Collate   |   Ctype    | Locale | ICU Rules | Access privileges
+     … +13 lines (ctrl+o to expand)
+  
+⏺ Interesting — these tables don't exist in the cluster's blitzy-postgres-0 at all. That changes the picture. Let me confirm what this DB actually holds.
+
+⏺ Bash(NS=blitzy-client
+      echo "=== all tables in client blitzy DB ==="; kubectl exec -n $NS blitzy-postgres-0 -- psql -U blitzy -d blitzy -P pager=off -c "SELECT table_…)
+  ⎿  === all tables in client blitzy DB ===
+      table_schema |        table_name
+     --------------+---------------------------
+     … +8 lines (ctrl+o to expand)
+  
+⏺ Checked again — still failing, same 502 → GHES 404 → installation_id=130, current pod 19 min into its retry loop, clone dir empty.
+
+  And I found something important about your DB update: the GHES installation tables are not in this cluster's database. blitzy-postgres-0 (in blitzy-client) only holds the mediator's operational tables:
+
+  alembic_version, audit_logs, callback_queue,
+  command_execution_archive, command_executions,
+  job_servers, mediator_configs
+
+  No github_installations, no ghes_apps. Those live in the main platform DB behind MAIN_SERVER_URL = https://platform.api-k.blitzystage.com (the blitzy-platform-stage cluster). The mediator fetches the SCM repo info / installation from there to mint the GHES token.
+
+  So:
+  - If your DB edit was against this client cluster's postgres, it touched nothing relevant — the row you want is github_installations (the installation_id='130' row) and ghes_apps (hostname azure-ghes.blitzystage.com) in the platform-stage DB.
+  - Regardless of the DB value, GHES itself is saying installation 130 doesn't exist for that app (the 404 on POST /app/installations/130/access_tokens). That's ground truth from the GHES server — so either the app was reinstalled (new numeric id, 130 is stale) or ghes_apps.app_id/PEM doesn't belong to the app that owns installation 130. A DB value alone can't make GHES accept 130 if GHES doesn't have it.
+  
+  Two ways forward — your call:
+
+  1. I can switch kube-context to the platform-stage cluster and query its github_installations / ghes_apps directly, to show what's actually stored for installation 130 vs. hostname azure-ghes.blitzystage.com. (This changes your current kubectl context; I'll switch it back.)
+  2. Or, faster ground-truth: check the GHES org lakshya UI → Settings → GitHub Apps → the installed Blitzy app → the installation URL shows the real current numeric installation id. If it's not 130, that's the fix — update github_installations.installation_id to the real one (in the platform DB) and clear any cached token.
+
+  Which do you want? And confirm: which DB did you update — the client blitzy-postgres-0, or the platform-stage DB?
+
+
+
+  Admin /client/job/register was softauth and logs the api key
+
+  Done. Here's the complete picture.
+
+  Why you were getting 404 — root cause found
+
+  The relay is not the problem. It's a path-agnostic proxy: a single catch-all route (/<path:path> in archie-service-relay/src/api/routes/relay.py) forwards any path to the mediator over the WebSocket tunnel. No allowlist, no per-route config — it needs zero changes to forward new mediator endpoints.
+
+  The 404 came from the mediator itself. In archie-client-mediator/main.py:
+  - Relay-forwarded traffic is dispatched through an internal Flask app (_create_internal_app → _register_business_blueprints(internal_app)), invoked via WSRouter.
+  - kill-pod lives in utils_bp, which was registered only on the main HTTP app (the old line 121) and not inside _register_business_blueprints.
+  - So kill-pod existed for direct HTTP but was invisible to the tunnel → the internal app had no matching route → mediator returned its own 404 "URL path not found".
+
+  That function's own docstring says "Add new blueprints here — they will automatically work through both HTTP and WebSocket" — utils_bp had just never been added.
+
+  Fixes applied (on branch fix/expose-utils-bp-kill-pod-over-relay, off main)                                                                                                                                                                                                                                                                                                                                                      
+
+  1. archie-client-mediator/main.py — the real, committable fix:
+  - Added utils_bp to _register_business_blueprints (now on both the main app and the WS-dispatch app).
+  - Removed the redundant standalone app.register_blueprint(utils_bp, …).
+
+  Verified by replicating main.py's registration: the WS-dispatch app now exposes POST /api/v1/kill-pod (→ 202 with {"confirm": true}, 400 without) and GET /api/v1/runners, with no duplicate-registration error.
+
+  2. src/api/models.py — local-only, not a code bug: Importing src.api was failing because ListRunnersResponse (used by the new list-runners endpoint, #218) was undefined. But models.py is git-ignored and generated from swagger.yaml via make pre-setup. The spec already defines ListRunnersResponse — your local copy was just stale after the pull. I regenerated it (generate-pydantic-models -i swagger.yaml …); CI does this
+  automatically, so deployed images were never broken.
+
+  On your two endpoints
+
+  - POST /api/v1/kill-pod — path was correct all along ({"confirm": true} body, X-Client-ID header). Works via relay once the main.py fix is deployed.
+  - "list worker pods" = GET /api/v1/runners (list_runners) — lives in runners_bp, already in _register_business_blueprints, so it works over the relay once deployed + models.py regenerated. No code change needed for it.
+
+  Next step
+
+  The main.py fix must be deployed to stage before your curl/CLI succeed. I haven't committed — want me to commit it to fix/expose-utils-bp-kill-pod-over-relay and open a PR against main?
+
+  One thing worth flagging: there's no safeguard preventing this class of regression. Want me to add a small parity test asserting every business blueprint reachable on the main app is also on the internal WS-dispatch app?

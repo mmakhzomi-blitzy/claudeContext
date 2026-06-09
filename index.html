@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Running Blitzy Jobs Through Dagster</title>
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reset.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/theme/black.css" id="theme" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/monokai.css" />
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    .reveal h1, .reveal h2, .reveal h3 { text-transform: none; letter-spacing: 0; }
+    .reveal h2 { font-size: 1.55em; margin: 0 0 0.45em 0; }
+    .reveal h3 { font-size: 1em; margin: 0.5em 0 0.25em 0; }
+    .reveal section ul, .reveal section ol { margin: 0.3em 0 0.5em 0; }
+    .reveal section li { margin: 0.12em 0; line-height: 1.3; }
+    .reveal section p { margin: 0.35em 0; line-height: 1.35; }
+    .reveal .agenda-group { margin-bottom: 0.35em; }
+    .reveal .agenda-group h3 { color: #8be9fd; font-size: 0.75em; margin: 0 0 0.1em 0; text-transform: uppercase; letter-spacing: 0.04em; }
+    .reveal .agenda-group ol { font-size: 0.72em; margin: 0 0 0.25em 1.2em; }
+    .reveal .agenda-group li { margin: 0.08em 0; line-height: 1.25; }
+    .reveal .agenda-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.8em 1.5em; text-align: left; margin-top: -0.4em; }
+    .reveal section.agenda-slide h2 { margin-top: -0.5em; margin-bottom: 0.3em; }
+    .reveal section.title-slide h1 { font-size: 2.1em; }
+    .reveal .subtitle { color: #8be9fd; font-weight: 400; }
+    .reveal table { font-size: 0.55em; border-collapse: collapse; width: 100%; border: 1px solid #444; }
+    .reveal table th, .reveal table td { border: 1px solid #444; padding: 6px 10px; text-align: left; }
+    .reveal table th { background: #222; color: #8be9fd; }
+    .reveal table tr:last-child td { border-bottom: 1px solid #444; }
+    .reveal .tight li { margin: 0.1em 0; }
+    .reveal .smaller { font-size: 0.75em; }
+    .reveal .tiny { font-size: 0.55em; }
+    .reveal pre code { font-size: 0.5em; line-height: 1.3; max-height: 420px; overflow-y: auto; display: block; }
+    .reveal pre { margin: 0.4em 0; }
+    .reveal .mermaid { max-height: 420px; margin: 0.4em 0; }
+    .reveal .mermaid svg { max-height: 420px; height: auto !important; }
+    .reveal .mermaid.mermaid-tall { max-height: 520px; }
+    .reveal .mermaid.mermaid-tall svg { max-height: 520px; }
+    .reveal .ai-flow { display: flex; flex-direction: column; align-items: center; gap: 0.25em; margin: 0.25em auto; font-size: 0.58em; }
+    .reveal .ai-flow .ai-node { border-radius: 7px; padding: 0.5em 1em; text-align: center; background: #fff; color: #000; border: 2px solid #555; min-width: 220px; line-height: 1.25; }
+    .reveal .ai-flow .ai-node .t { font-weight: 700; display: block; font-size: 1em; }
+    .reveal .ai-flow .ai-node .s { display: block; font-size: 0.8em; opacity: 0.82; margin-top: 0.1em; }
+    .reveal .ai-flow .ai-node-dark { background: #2b2b2b; color: #fff; border-color: #666; min-width: 170px; }
+    .reveal .ai-flow .ai-node-cyan { background: #8be9fd; border: 3px solid #2aa; }
+    .reveal .ai-flow .ai-node-green { background: #50fa7b; border: 3px solid #2a7; }
+    .reveal .ai-flow .ai-node-pale { background: #fff8dc; border-color: #999; min-width: 140px; padding: 0.45em 0.7em; }
+    .reveal .ai-flow .ai-arrow { font-size: 1.2em; color: #8be9fd; line-height: 1; }
+    .reveal .ai-flow .ai-fanout { display: flex; gap: 0.6em; justify-content: center; }
+    .reveal .ai-flow .ai-fanout-arrows { display: flex; gap: 0.6em; justify-content: center; }
+    .reveal .ai-flow .ai-fanout-arrows .ai-arrow { width: 140px; text-align: center; }
+    .reveal table { font-size: 0.52em; }
+    .reveal .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5em; text-align: left; }
+    .reveal .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; text-align: left; font-size: 0.8em; }
+    .reveal .callout { background: #1e2a3a; border-left: 4px solid #8be9fd; padding: 0.6em 1em; text-align: left; }
+    .reveal .bad { color: #ff6b6b; }
+    .reveal .good { color: #50fa7b; }
+    .reveal .mid { color: #f1fa8c; }
+    .reveal section p, .reveal section ul, .reveal section ol { text-align: left; }
+    .reveal .flow { font-family: "SF Mono", Menlo, monospace; font-size: 0.65em; background: #1a1a1a; padding: 0.8em; border-radius: 6px; line-height: 1.8; }
+    .reveal .footer { position: absolute; bottom: 20px; right: 30px; font-size: 0.45em; color: #666; }
+    .reveal .mermaid { background: transparent; border-radius: 6px; padding: 0.4em; }
+    .reveal .mermaid svg { max-width: 100%; height: auto; }
+    .reveal .phase-table th { background: #1e2a3a; color: #8be9fd; }
+    .reveal .phase-table tr:hover { background: #222; }
+    .reveal .phase-num { display: inline-block; background: #8be9fd; color: #000; border-radius: 50%; width: 1.6em; height: 1.6em; line-height: 1.6em; text-align: center; font-weight: 600; margin-right: 0.4em; }
+  </style>
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <!-- ==================== TITLE ==================== -->
+      <section class="title-slide">
+        <h1>Running Blitzy Jobs<br/>Through Dagster</h1>
+        <p class="subtitle">Orchestrating the <code>archie-job-*</code> fleet</p>
+        <p class="smaller">mohammed@blitzy.com · 2026-04-20</p>
+      </section>
+
+      <!-- ==================== AGENDA ==================== -->
+      <section class="agenda-slide">
+        <h2>Agenda</h2>
+        <div class="agenda-grid">
+          <div class="agenda-group">
+            <h3>Where we are</h3>
+            <ol>
+              <li>Project status</li>
+              <li>Current state — seven jobs</li>
+              <li>Current flow — sequences</li>
+            </ol>
+          </div>
+          <div class="agenda-group">
+            <h3>Why change</h3>
+            <ol start="4">
+              <li>Why a workflow engine?</li>
+              <li>Modern engine features</li>
+              <li>Core primitives</li>
+            </ol>
+          </div>
+          <div class="agenda-group">
+            <h3>Capabilities</h3>
+            <ol start="7">
+              <li>Built-in operations</li>
+              <li>Job tracking &amp; visibility</li>
+              <li>Metrics — tokens, %LOC</li>
+            </ol>
+          </div>
+          <div class="agenda-group">
+            <h3>Tool ranking</h3>
+            <ol start="10">
+              <li>Dagster vs Airflow 3</li>
+              <li>Argo Workflows</li>
+              <li>Ranked for Blitzy</li>
+            </ol>
+          </div>
+          <div class="agenda-group">
+            <h3>Context</h3>
+            <ol start="13">
+              <li>Multi-env deployment</li>
+              <li>Other options on the market</li>
+            </ol>
+          </div>
+          <div class="agenda-group">
+            <h3>Path forward</h3>
+            <ol start="15">
+              <li>Phased implementation plan</li>
+              <li>AI-augmented operations</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== PROJECT STATUS ==================== -->
+      <section>
+        <section>
+          <h2>Project status — what's done</h2>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">✅ Investigation</h3>
+              <ul class="tight">
+                <li>Seven <code>archie-job-*</code> services mapped</li>
+                <li>Tracker audited — ~40% is generic plumbing</li>
+                <li>Three-way tool comparison done</li>
+                <li>Multi-env claim verified</li>
+                <li>AI-integration landscape surveyed</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="good">✅ Plan</h3>
+              <ul class="tight">
+                <li>7-phase rollout (starts with <code>code-downloader</code>)</li>
+                <li>Local dev: capture → replay → verify</li>
+                <li>Six bootstrap prompts for Claude Code</li>
+                <li>AI-Phase A–E roadmap</li>
+              </ul>
+            </div>
+          </div>
+          <p class="smaller" style="margin-top: 0.6em; text-align: center; color: #8be9fd;"><em>Analysis complete: defensible ranking, scoped Phase 1, replay loop to validate.</em></p>
+        </section>
+
+        <section>
+          <h2>Project status — what's next</h2>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="mid">🟡 Decisions pending</h3>
+              <ul class="tight">
+                <li><strong>Dagster+ vs OSS</strong> — Branch Deployments are Dagster+-only</li>
+                <li><strong>PoC owner</strong> — platform team or dedicated workstream?</li>
+                <li><strong>Parallel Airflow 3 PoC?</strong></li>
+                <li><strong>Scope of jobtracker rebuild</strong> — thin vs analytics</li>
+              </ul>
+              <h3 class="bad">🔴 Risks tracked</h3>
+              <ul class="tight">
+                <li>Long-running jobs vs k8s Pod budgets</li>
+                <li>Control-plane cost vs current Cloud Run</li>
+                <li>Airflow 3 momentum may flip ranking in ~12 months</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="good">🎯 Next decision gate</h3>
+              <ul class="tight">
+                <li><strong>Phase 1 exit review</strong> — 2 weeks after kickoff</li>
+                <li>Demo: <code>code-downloader</code> under Dagster w/ metadata visible</li>
+                <li>Go / no-go for Phase 2</li>
+              </ul>
+            </div>
+          </div>
+          <p class="smaller callout"><strong>Today's ask:</strong> align on ranking (Dagster &gt; Airflow 3 &gt; Argo), approve the phased plan, pick Dagster+ vs OSS + a PoC owner so Phase 1 can start.</p>
+        </section>
+      </section>
+
+      <!-- ==================== CURRENT STATE ==================== -->
+      <section>
+        <section>
+          <h2>Today's job fleet</h2>
+          <table>
+            <tr><th>Job</th><th>Next hop</th><th>Runtime</th></tr>
+            <tr><td>archie-job-code-downloader</td><td>Pub/Sub → code-graph OR k8s Job</td><td>Cloud Run Job</td></tr>
+            <tr><td>archie-job-code-graph-generator</td><td>Pub/Sub → reverse-file-mapper</td><td>Cloud Run / k8s</td></tr>
+            <tr><td>archie-job-document-generator</td><td>Pub/Sub tech-spec events</td><td>Cloud Run Job</td></tr>
+            <tr><td>archie-job-reverse-file-mapper</td><td>Pub/Sub → reverse-thinking</td><td>Cloud Run Job</td></tr>
+            <tr><td>archie-job-reverse-thinking-generator</td><td>k8s Job → reverse-code (per OS)</td><td>Cloud Run → k8s</td></tr>
+            <tr><td>archie-job-reverse-code-generator</td><td>Emits billing report + PR data</td><td>Cloud Run / k8s</td></tr>
+            <tr><td>archie-job-code-generator</td><td>Pub/Sub → upload topic</td><td>Cloud Run Job</td></tr>
+          </table>
+        </section>
+
+        <section>
+          <h2>How they chain today</h2>
+          <div class="flow">
+            code-downloader ──► code-graph-generator ──► reverse-file-mapper<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─► (batches, per-OS)&nbsp;&nbsp;&nbsp;&nbsp;│<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br/>
+            document-generator ──(independent)──► reverse-thinking-generator<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▼<br/>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;reverse-code-generator (+ billing)<br/>
+            code-generator ──► upload topic (separate branch)
+          </div>
+          <p class="smaller">Topology is implicit — it lives across seven <code>publish_notification(...)</code> and <code>submit_kubernetes_job(...)</code> calls. No central DAG.</p>
+        </section>
+
+        <section>
+          <h2>What the jobs share</h2>
+          <ul class="tight smaller">
+            <li>Entry point: <code>python main.py</code> reading <code>EVENT_DATA</code> JSON env var</li>
+            <li>Internal logic: LangGraph <code>StateGraph</code> with async streaming</li>
+            <li>Status: Pub/Sub events to <code>PLATFORM_EVENTS_TOPIC</code> (<code>IN_PROGRESS</code>/<code>DONE</code>/<code>FAILED</code>)</li>
+            <li>Tracing: LangSmith (<code>LANGSMITH_*</code> env)</li>
+            <li>Storage: GCS via <code>AdminStorageService</code>, Neo4j via <code>CodeGraphBuilder</code></li>
+            <li>Retry: <code>@archie_exponential_retry</code> re-implemented per repo; Cloud Run <code>--max-retries 0</code></li>
+            <li>Deploy: GitHub Actions → <code>gcloud run jobs deploy</code>, hardcoded <code>_DEV</code></li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- ==================== SEQUENCE DIAGRAMS ==================== -->
+      <section>
+        <section>
+          <h2>Current job flow — sequence</h2>
+          <p class="smaller">A "full build" today spans five services, two fan-outs, Pub/Sub hops, and one self-submitted k8s Job. No run-id ties them together.</p>
+          <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant UI as Upstream
+    participant PS as Pub/Sub
+    participant CD as Downloader
+    participant CG as Graph-Gen
+    participant FM as File-Mapper
+    participant RT as Rev-Thinker
+    participant RC as Rev-Code
+    participant GCS as GCS + Neo4j
+
+    UI->>CD: EVENT_DATA
+    CD->>GCS: Upload batches
+    CD-->>PS: IN_PROGRESS / DONE
+    CD->>CG: k8s Job per batch
+    CG->>GCS: Build code graph
+    CG-->>PS: IN_PROGRESS / DONE
+    CG->>FM: Pub/Sub trigger
+    FM->>GCS: Upload mapping, schemas
+    FM-->>PS: IN_PROGRESS / DONE
+    FM->>RT: Pub/Sub trigger
+    RT->>GCS: Upload sorted files, deps
+    RT->>RC: k8s Job (per OS)
+    RC->>GCS: Write code, BillingReport
+    RC-->>PS: DONE (pr_data, lines, hours)
+          </pre>
+          <p class="tiny">Each <code>-->>PS</code> hop is a separate notification payload; external subscribers re-assemble them.</p>
+        </section>
+
+        <section>
+          <h2>Independent branches</h2>
+          <p class="smaller">Two pipelines don't join the chain above:</p>
+          <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant UI as Upstream
+    participant DG as Doc-Gen
+    participant CDG as Code-Gen
+    participant PS as Pub/Sub
+    participant GCS as GCS
+
+    UI->>DG: EVENT_DATA (tech-spec)
+    DG->>GCS: Download prompt + attachments
+    DG->>GCS: Upload tech-spec
+    DG-->>PS: IN_PROGRESS / DONE
+
+    UI->>CDG: EVENT_DATA (code gen)
+    CDG->>GCS: Download spec, structure, deps
+    CDG->>GCS: Upload project guide
+    CDG-->>PS: Publish UPLOAD_CODE_TOPIC
+          </pre>
+          <p class="smaller">Both emit the same status-event schema but are triggered from different upstream services; topology must be reconstructed from the payloads.</p>
+        </section>
+
+        <section>
+          <h2>What's missing</h2>
+          <ul class="tight smaller">
+            <li><span class="bad">No single run-id</span> — status events only correlate via <code>job_id</code> / <code>code_gen_id</code>.</li>
+            <li><span class="bad">Two fan-out shapes</span> — batch (downloader→graph) and OS (thinker→code) are hand-rolled.</li>
+            <li><span class="bad">Chain knowledge lives in code</span> — seven <code>publish_notification</code> / <code>submit_kubernetes_job</code> call-sites.</li>
+            <li><span class="bad">Independent jobs aren't visible together</span> — document-generator + code-generator are their own pipelines.</li>
+            <li><span class="bad">No retry coordination</span> — each service has its own exponential-retry helper.</li>
+          </ul>
+          <p class="smaller good">Every one of these becomes a Dagster primitive: run, dynamic output, job, sensor, RetryPolicy.</p>
+        </section>
+
+        <section>
+          <h2>Same flow under Dagster</h2>
+          <p class="smaller">One run, one id, visible gantt, resumable from any failed op.</p>
+          <pre class="mermaid">
+flowchart LR
+    S([Pub/Sub sensor]) --> D[code-downloader op]
+    D -->|dynamic outputs<br/>per batch| G[code-graph op]
+    G --> FM[reverse-file-mapper op]
+    FM --> RT[reverse-thinker op]
+    RT -->|dynamic outputs<br/>per target OS| RC[reverse-code op]
+    RC --> A[(BillingReport asset<br/>+ metadata)]
+    style A fill:#50fa7b,color:#000
+    style S fill:#8be9fd,color:#000
+          </pre>
+        </section>
+      </section>
+
+      <!-- ==================== WHY A WORKFLOW ENGINE ==================== -->
+      <section>
+        <section>
+          <h2>Why a workflow engine? — runtime debts</h2>
+          <p class="smaller">Technical debts with citations — not hypotheticals. Part 1 of 2.</p>
+          <ol class="tight smaller">
+            <li><strong>Implicit state machine as a mutable list.</strong> <code>reverse-code-generator/main.py:380</code> — <code>stage_tracker = ["CODE_GENERATION"]</code> shared mutably with the helper so failure notifications can report the right stage.</li>
+            <li><strong>Import blocked without prod credentials.</strong> Every <code>main.py</code> calls <code>storage.Client()</code>, <code>pubsub_v1.PublisherClient()</code>, and 15+ <code>os.environ[...]</code> reads at module load (e.g. <code>document-generator/main.py:24-40</code>). Nothing is unit-testable in isolation.</li>
+            <li><strong>Batch fan-in implemented as a Neo4j query.</strong> <code>code-graph-generator/main.py:211-217</code> — <code>if graph_builder.are_other_batches_complete(...)</code> decides when to emit the next-stage trigger. Coordination logic lives in the graph database.</li>
+            <li><strong>Mid-run k8s submission hides the fan-out.</strong> <code>reverse-thinking-generator/main.py:220-244</code> submits <code>REVERSE_CODE_GENERATOR</code> / <code>_WINDOWS</code> per target OS via a bare function call — never visible in any DAG view.</li>
+          </ol>
+        </section>
+
+        <section>
+          <h2>Why a workflow engine? — consistency debts</h2>
+          <p class="smaller">Part 2 of 2 — issues that compound every time a new job is added.</p>
+          <ol class="tight smaller" start="5">
+            <li><strong>Retry policy duplicated seven times.</strong> <code>@archie_exponential_retry</code> imported in every repo (e.g. <code>code-downloader/main.py:508</code>). Seven back-off curves to keep in sync.</li>
+            <li><strong>Cross-job topology lives in Pub/Sub call-sites.</strong> <code>reverse-file-mapper/main.py:217</code> publishes to <code>GENERATE_REVERSE_THINKING_TOPIC</code>. The pipeline's shape is distributed across string literals in seven files.</li>
+            <li><strong>Event schema is implicit.</strong> Every job reads <code>event_data.get("tech_spec_id", "")</code>, <code>event_data.get("propagate", True)</code>. The <code>EVENT_DATA</code> contract is documented nowhere and drifts silently across repos.</li>
+          </ol>
+          <p class="smaller callout"><strong>Total:</strong> seven distinct anti-patterns, each with a named location in the code. None are hypothetical.</p>
+        </section>
+
+        <section>
+          <h2>What you inherit from a workflow engine</h2>
+          <div class="two-col smaller">
+            <div>
+              <h3>Orchestration</h3>
+              <ul class="tight">
+                <li>Explicit DAG, diffable in Git</li>
+                <li>One run-id spans the full pipeline</li>
+                <li>Typed retry policies</li>
+                <li>Backfills + reruns from a failed step</li>
+                <li>Sensors: Pub/Sub, GCS, cron</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Operability</h3>
+              <ul class="tight">
+                <li>UI with gantt + logs + metadata</li>
+                <li>Structured run history &amp; metrics</li>
+                <li>Per-op resource limits</li>
+                <li>Alerts &amp; SLAs per step</li>
+                <li>Lineage for data outputs</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <!-- ==================== WHY CHANGE ==================== -->
+      <section>
+        <section>
+          <h2>Modern playbook — the data layer</h2>
+          <p class="smaller">"Workflow engine" used to mean cron + task DAG. Modern engines (Dagster, Airflow 3, Prefect 3, Flyte) ship a richer set of primitives.</p>
+          <div class="three-col smaller">
+            <div class="callout">
+              <h3 class="good">Data-aware</h3>
+              <ul class="tight">
+                <li><strong>Assets</strong> as first-class outputs</li>
+                <li><strong>Typed I/O + I/O managers</strong></li>
+                <li><strong>Lineage &amp; freshness</strong> policies</li>
+              </ul>
+            </div>
+            <div class="callout">
+              <h3 class="good">Event-driven</h3>
+              <ul class="tight">
+                <li><strong>Sensors</strong> — Pub/Sub, GCS, asset triggers</li>
+                <li><strong>Dynamic outputs</strong> — fan-out native</li>
+                <li><strong>Asset-based scheduling</strong></li>
+              </ul>
+            </div>
+            <div class="callout">
+              <h3 class="good">Observable</h3>
+              <ul class="tight">
+                <li><strong>Structured metadata</strong> — tokens, %LOC, $</li>
+                <li><strong>Modern UI</strong> — asset graph + Gantt + logs</li>
+                <li><strong>GraphQL / REST API</strong> for dashboards</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Modern playbook — build &amp; operate</h2>
+          <p class="smaller">The same primitives apply to how you ship, run, and extend the pipeline.</p>
+          <div class="three-col smaller">
+            <div class="callout">
+              <h3 class="good">Composable</h3>
+              <ul class="tight">
+                <li><strong>Typed resources</strong> — env-aware deps per op</li>
+                <li><strong>Hot reload / code locations</strong></li>
+                <li><strong>Native integrations</strong> — k8s, dbt, LLM APIs</li>
+              </ul>
+            </div>
+            <div class="callout">
+              <h3 class="good">Operable</h3>
+              <ul class="tight">
+                <li><strong>Retry policies</strong> — typed, visible in UI</li>
+                <li><strong>Partial reruns</strong> from a failed step</li>
+                <li><strong>Backfills + partitions</strong></li>
+              </ul>
+            </div>
+            <div class="callout">
+              <h3 class="good">AI-ready</h3>
+              <ul class="tight">
+                <li><strong>Hooks</strong> — triage, alerting, audit</li>
+                <li><strong>Structured events</strong> — LLM-consumable</li>
+                <li><strong>Branch / PR envs</strong> — test AI automations</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Old vs new — orchestration primitives</h2>
+          <table>
+            <tr><th>Need</th><th>Today (custom)</th><th>Modern engine</th></tr>
+            <tr><td>Run 7 jobs in order</td><td>Hand-coded <code>publish_notification</code> + <code>submit_kubernetes_job</code> across seven repos</td><td>One <code>@job</code> definition; topology is diffable</td></tr>
+            <tr><td>Fan out per batch / per OS</td><td>Hardcoded <code>BATCH_INDEX_JOB_TYPES</code>; bespoke Neo4j check</td><td><code>DynamicOutput</code> — native primitive</td></tr>
+            <tr><td>Correlate a multi-job build</td><td>Reassemble from Pub/Sub events via <code>job_id</code> / <code>code_gen_id</code></td><td>One <code>run_id</code> spans the whole pipeline</td></tr>
+            <tr><td>Retry a specific step</td><td>Not supported — all-or-nothing retrigger</td><td>One-click partial rerun from UI or API</td></tr>
+            <tr><td>Status freshness</td><td>Polling Cloud Run / k8s APIs every cycle</td><td>Push events from the engine</td></tr>
+          </table>
+          <p class="smaller good">Every "today" column is work we already own. Every "modern engine" column is built-in.</p>
+        </section>
+
+        <section>
+          <h2>Old vs new — metadata &amp; developer experience</h2>
+          <table>
+            <tr><th>Need</th><th>Today (custom)</th><th>Modern engine</th></tr>
+            <tr><td>Track tokens / %LOC / $</td><td>Custom <code>BillingReport</code> JSON in GCS + tracker DB columns</td><td><code>MetadataValue</code> on the run; auto-rendered in UI</td></tr>
+            <tr><td>Trigger from an event</td><td>Tracker exposes <code>POST /v1/job/{id}/trigger</code></td><td><code>@sensor</code> or <code>launchRun</code> GraphQL — built-in</td></tr>
+            <tr><td>Add a new job</td><td>New repo, new <code>ArchieJobType</code> enum, tracker mapping, GitHub Action</td><td>One <code>@op</code> added to a <code>@job</code></td></tr>
+            <tr><td>Local reproduction</td><td>Requires GCP + Neo4j + LangSmith creds to <em>import</em></td><td><code>dagster dev</code> with mock resources</td></tr>
+            <tr><td>AI triage on failure</td><td>Would need a microservice on top of Pub/Sub</td><td>One <code>@failure_hook</code> decorator</td></tr>
+          </table>
+          <p class="smaller callout"><strong>Total across both slides:</strong> ten places the engine gives us "built-in" what we've built (or would need to build) by hand.</p>
+        </section>
+
+        <section>
+          <h2>What "modern" actually unlocks</h2>
+          <ul class="tight smaller">
+            <li><strong>New jobs cost less.</strong> Adding a job is one <code>@op</code>, not a new repo + GitHub Action + tracker enum entry + dashboard filter.</li>
+            <li><strong>Complex flows become representable.</strong> Conditional branches, dynamic fan-out, asset freshness — all first-class, not custom code.</li>
+            <li><strong>The tracker rebuild is smaller.</strong> ~40% of backend retires; the remaining Blitzy-specific dashboards get cleaner data from GraphQL.</li>
+            <li><strong>AI automation becomes trivial.</strong> The triage hook is a decorator, not a microservice.</li>
+            <li><strong>Multi-env becomes a config file</strong>, not seven GitHub Actions workflows × three envs.</li>
+            <li><strong>Onboarding speeds up.</strong> A new engineer reads one <code>Definitions</code> file instead of tracing Pub/Sub topics across seven repos.</li>
+          </ul>
+          <p class="smaller callout"><strong>The cost of <em>not</em> changing</strong> is that every one of these is a custom system we build and maintain — and the tracker audit shows we're already doing exactly that.</p>
+        </section>
+      </section>
+
+      <!-- ==================== OPS & SENSORS CONCEPT ==================== -->
+      <section>
+        <section>
+          <h2>Core primitives</h2>
+          <p class="smaller">Workflow engines have three small vocabularies. Learn these and the rest is plumbing.</p>
+          <div class="three-col">
+            <div class="callout">
+              <h3 class="good">Op / operator</h3>
+              <p class="smaller"><strong>A unit of work.</strong> Takes inputs, produces outputs, has config &amp; retries.</p>
+              <p class="tiny">Airflow: <code>BashOperator</code>, <code>PostgresOperator</code>, <code>KubernetesPodOperator</code></p>
+              <p class="tiny">Dagster: <code>@op</code>, <code>k8s_job_op</code>, <code>shell_op</code></p>
+            </div>
+            <div class="callout">
+              <h3 class="good">Sensor</h3>
+              <p class="smaller"><strong>An event-driven trigger.</strong> Polls or subscribes to external signals; fires a run when something happens.</p>
+              <p class="tiny">e.g. Pub/Sub message, new GCS object, upstream asset refreshed</p>
+            </div>
+            <div class="callout">
+              <h3 class="good">Schedule</h3>
+              <p class="smaller"><strong>A time-driven trigger.</strong> Cron expression → launches a run.</p>
+              <p class="tiny">Complementary to sensors, not a replacement</p>
+            </div>
+          </div>
+          <p class="smaller">Ops are the <em>verbs</em> of the pipeline. Sensors &amp; schedules are the <em>triggers</em>. A "job" wires ops together; a "run" is one execution of a job.</p>
+        </section>
+
+        <section>
+          <h2>What an op looks like</h2>
+          <div class="two-col smaller">
+            <div>
+              <h3>Airflow operator</h3>
+              <pre><code class="language-python">from airflow.operators.bash import BashOperator
+
+run_etl = BashOperator(
+    task_id="run_etl",
+    bash_command="python etl.py",
+    retries=3,
+    retry_delay=timedelta(minutes=5),
+)</code></pre>
+              <p class="tiny">Operator = instantiated Python class. Connections &amp; config live outside the code.</p>
+            </div>
+            <div>
+              <h3>Dagster op</h3>
+              <pre><code class="language-python">from dagster import op, RetryPolicy
+
+@op(retry_policy=RetryPolicy(max_retries=3, delay=300))
+def run_etl(context, raw_data: dict) -> dict:
+    context.log.info("processing %d rows", len(raw_data))
+    return transform(raw_data)</code></pre>
+              <p class="tiny">Op = plain decorated Python function. Typed inputs/outputs. Resources injected, not imported.</p>
+            </div>
+          </div>
+          <p class="smaller callout">Key idea in both: <strong>the engine owns retries, logging, status</strong> — you write the work, not the orchestration boilerplate.</p>
+        </section>
+
+        <section>
+          <h2>What a sensor looks like</h2>
+          <pre><code class="language-python">from dagster import sensor, RunRequest, SkipReason
+
+@sensor(job=archie_full_build, minimum_interval_seconds=30)
+def on_new_build_event(context):
+    cursor = context.cursor or "0"
+    messages = pubsub.pull(subscription="dev-archie-triggers",
+                           ack_deadline=0,  # peek, don't commit
+                           start=cursor)
+    if not messages:
+        return SkipReason("no new events")
+
+    for msg in messages:
+        yield RunRequest(
+            run_key=msg.message_id,           # de-dupe
+            run_config={"ops": {"download_code":
+                {"config": {"event_data": msg.data.decode()}}}},
+            tags={"company_id": msg.attributes["company_id"]},
+        )
+    context.update_cursor(messages[-1].publish_time)</code></pre>
+          <ul class="tight smaller">
+            <li><strong>Stateful</strong> — the cursor remembers what's been processed</li>
+            <li><strong>De-duplicated</strong> — <code>run_key</code> prevents double-launches on retries</li>
+            <li><strong>Tagged</strong> — tags flow onto every run for filtering &amp; billing</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>How they fit Blitzy</h2>
+          <table>
+            <tr><th>Today</th><th>In Dagster</th></tr>
+            <tr><td>Upstream service publishes <code>EVENT_DATA</code> to a Pub/Sub topic</td><td><strong>Sensor</strong> watches the topic, launches a run with the payload</td></tr>
+            <tr><td><code>archie-job-code-downloader</code> Cloud Run Job</td><td><strong>Op</strong> (<code>k8s_job_op</code> in Phase 1, native <code>@op</code> later)</td></tr>
+            <tr><td>Downloader publishes to <code>GRAPH_CODE_TOPIC</code> to chain graph-generator</td><td><strong>Direct dependency</strong> inside the same job — no extra hop</td></tr>
+            <tr><td>Self-submitted k8s Job (per-OS fan-out in reverse-thinker)</td><td><strong>Dynamic outputs</strong> → one op instance per OS</td></tr>
+            <tr><td>Cron or manual "rerun all repos for company X"</td><td><strong>Schedule</strong> or <strong>backfill</strong> over an asset partition</td></tr>
+            <tr><td>No trigger for "re-run when tech-spec changed"</td><td><strong>Asset sensor</strong> on the <code>tech_spec</code> asset</td></tr>
+          </table>
+          <p class="smaller good">Four primitives — op, sensor, schedule, asset — cover everything the current seven-service chain does, plus the two triggers it doesn't have today.</p>
+        </section>
+      </section>
+
+      <!-- ==================== BUILT-IN OPS ==================== -->
+      <section>
+        <section>
+          <h2>Built-in operations</h2>
+          <p class="smaller">Airflow's "operators" vs Dagster's "ops + resources":</p>
+          <table>
+            <tr><th>Capability</th><th>Airflow</th><th>Dagster</th></tr>
+            <tr><td>Shell command</td><td>BashOperator</td><td>shell_op (dagster-shell)</td></tr>
+            <tr><td>k8s Pod</td><td>KubernetesPodOperator</td><td>k8s_job_op (dagster-k8s)</td></tr>
+            <tr><td>Postgres / MySQL</td><td>PostgresOperator, hooks</td><td>dagster-postgres resource</td></tr>
+            <tr><td>Snowflake / BigQuery</td><td>Providers</td><td>dagster-snowflake / -bigquery</td></tr>
+            <tr><td>dbt</td><td>DbtRunOperator</td><td>dagster-dbt (first-class assets)</td></tr>
+            <tr><td>HTTP</td><td>SimpleHttpOperator</td><td>Plain Python op + resource</td></tr>
+            <tr><td>Pub/Sub / GCS</td><td>Google providers</td><td>dagster-gcp</td></tr>
+            <tr><td>Sensors</td><td>Many built-ins</td><td><code>@sensor</code> + helpers</td></tr>
+            <tr><td>Branching</td><td>BranchPythonOperator</td><td>Dynamic outputs / conditional assets</td></tr>
+          </table>
+          <p class="smaller"><span class="mid">Bottom line:</span> Airflow's catalog is wider. Dagster closes the gap with typed Python, so you write less YAML glue.</p>
+        </section>
+
+        <section>
+          <h2>For blitzy specifically</h2>
+          <p class="smaller">The migration mainly uses four primitives — nothing exotic.</p>
+          <ul class="tight smaller">
+            <li><code>k8s_job_op</code> — run the existing Docker images unchanged</li>
+            <li>Thin <code>@op</code> wrappers — preserve the <code>main.py</code> entry points</li>
+            <li><code>dagster-gcp</code> — Pub/Sub, GCS, Artifact Registry</li>
+            <li>Custom LangSmith resource — central place for tracing + token pulls</li>
+          </ul>
+          <p class="smaller good">The jobs themselves don't have to change to get orchestrated.</p>
+        </section>
+      </section>
+
+      <!-- ==================== JOB TRACKING ==================== -->
+      <section>
+        <section>
+          <h2>Job tracking &amp; visibility</h2>
+          <p class="smaller">Out-of-the-box from the Dagster UI:</p>
+          <ul class="tight smaller">
+            <li><strong>Runs page</strong> — every trigger → one run, gantt of ops, full logs</li>
+            <li><strong>Asset graph</strong> — tech-spec, code-graph, reverse-code PR shown as nodes</li>
+            <li><strong>Per-op metadata</strong> — typed (int, float, url, markdown) on each step</li>
+            <li><strong>One-click retries</strong> from the failed step</li>
+            <li><strong>Backfills</strong> — re-materialize ranges (e.g. all repos for a company)</li>
+            <li><strong>Timeline view</strong> across runs — trend durations, spot regressions</li>
+            <li><strong>Run tags</strong> — filter by env, company_id, job_type</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>One run-id for the whole pipeline</h2>
+          <p class="smaller">Today you reconstruct a build from Pub/Sub events with <code>job_id</code>, <code>project_id</code>, <code>code_gen_id</code>, <code>batch_index</code>. Dagster gives you a single run that owns all of it — parent, children, retries, timings — with no bespoke dashboard needed.</p>
+          <div class="callout smaller">
+            <strong>Concrete win:</strong> when <code>reverse-thinking-generator</code> fails at hour 3 of a 6-hour build, you re-run from that op while preserving upstream code-graph outputs.
+          </div>
+        </section>
+      </section>
+
+      <!-- ==================== METRICS ==================== -->
+      <section>
+        <section>
+          <h2>Built-in metrics</h2>
+          <table>
+            <tr><th>Metric</th><th>Source</th><th>Where it lives</th></tr>
+            <tr><td>Step status, duration, start/end</td><td>Dagster run events</td><td>UI + event log</td></tr>
+            <tr><td>Retry count, failures, error class</td><td>Run events</td><td>UI + metrics export</td></tr>
+            <tr><td>Asset materializations &amp; freshness</td><td>Asset events</td><td>Asset catalog</td></tr>
+            <tr><td>CPU / memory per step</td><td>K8sRunLauncher + Prometheus</td><td>Grafana</td></tr>
+            <tr><td>Tag-based filters (env, company)</td><td>Run tags</td><td>UI + GraphQL</td></tr>
+          </table>
+        </section>
+
+        <section>
+          <h2>Custom metrics — you already have them</h2>
+          <p class="smaller">Every field the <code>reverse-code</code> notifier emits can become first-class Dagster metadata — no parallel metrics pipeline needed:</p>
+          <pre><code class="language-python">@op
+def emit_billing(context, billing: dict):
+    context.add_output_metadata({
+        "files_touched":  MetadataValue.int(billing["files_modified"]),
+        "lines_added":    MetadataValue.int(billing["breakdown"]["additions"]),
+        "lines_edited":   MetadataValue.int(billing["breakdown"]["edits"]),
+        "lines_removed": MetadataValue.int(billing["breakdown"]["removals"]),
+        "percent_LOC":    MetadataValue.float(billing["percent_loc"]),
+        "hours_saved":    MetadataValue.float(billing["hours_saved"]),
+        "tokens_input":   MetadataValue.int(billing["tokens"]["input"]),
+        "tokens_output": MetadataValue.int(billing["tokens"]["output"]),
+        "cost_usd":       MetadataValue.float(billing["cost_usd"]),
+        "langsmith_run": MetadataValue.url(billing["langsmith_run_url"]),
+    })</code></pre>
+          <p class="smaller good">All of these appear directly on the run page, are queryable via GraphQL, and can be exported to Datadog / Prometheus.</p>
+        </section>
+
+        <section>
+          <h2>Where today's fields map</h2>
+          <div class="smaller">
+            <ul class="tight">
+              <li><code>files_touched, lines_{added,edited,removed}</code> → op metadata on reverse-code</li>
+              <li><code>lines_onboarded, files_onboarded, file_extensions</code> → op metadata on downloader</li>
+              <li><code>total_files_processed, total_lines_processed</code> → asset metadata on code-graph</li>
+              <li><code>estimated_lines_generated, estimated_hours_saved</code> → op metadata on document-generator</li>
+              <li><code>BillingReport</code> (GCS) → attached as <code>MetadataValue.path</code> + inline summary</li>
+              <li>LangSmith token counts → pulled via SDK inside the op, attached as metadata</li>
+            </ul>
+          </div>
+        </section>
+      </section>
+
+      <!-- ==================== METADATA — STAKEHOLDER ==================== -->
+      <section>
+        <section>
+          <h2>Metadata visibility — today</h2>
+          <p class="smaller">What the tracker actually surfaces vs what's hiding in JSONB blobs.</p>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">Visible in the UI today</h3>
+              <ul class="tight">
+                <li>Status, duration, phase, ETA</li>
+                <li>User, project, execution-id</li>
+                <li>Per-company LOC + hours saved (Sales)</li>
+                <li>Retrigger actions, logs + LangSmith links</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="bad">Hidden in <code>event_data</code> JSONB</h3>
+              <ul class="tight">
+                <li><code>company_id</code>, <code>batch_index</code>, <code>team_id</code></li>
+                <li>Token counts, cost, model name</li>
+                <li><code>files_touched</code>, <code>lines_*</code>, <code>pr_data</code></li>
+                <li>Retry count, parent-run, error class</li>
+                <li>File-extension histograms</li>
+              </ul>
+            </div>
+          </div>
+          <p class="smaller callout"><strong>Symptom:</strong> company &amp; batch filters run JSONB text scans. No cost-per-PR view. No trend charts. No grouped-incident view.</p>
+        </section>
+
+        <section>
+          <h2>What improved visibility looks like</h2>
+          <p class="smaller">After lifting the hidden fields into first-class metadata:</p>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">New UI views</h3>
+              <ul class="tight">
+                <li><strong>Cost per PR</strong> — Sales metric request</li>
+                <li><strong>Tokens per company / day</strong> — billing + forecast</li>
+                <li><strong>Retry rate</strong> by job type &amp; error class</li>
+                <li><strong>Grouped incidents</strong> — "8 × Neo4j timeout, 2 × rate-limit"</li>
+                <li><strong>Week-over-week trends</strong> — duration p95, failure rate</li>
+                <li><strong>Parent-run correlation</strong> — the full build as one view</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="good">New filters</h3>
+              <ul class="tight">
+                <li>Company (indexed UUID, not text scan)</li>
+                <li>Error class (NEO4J_TIMEOUT, LLM_RATE_LIMIT, …)</li>
+                <li>Retry range (0, 1–2, 3+)</li>
+                <li>Cost range ($0–1, $1–5, $5+)</li>
+                <li>Batch index (real column, sortable)</li>
+              </ul>
+            </div>
+          </div>
+          <p class="smaller good">Net win: the dashboards people have been asking Sales &amp; Engineering for, without rebuilding the API surface.</p>
+        </section>
+
+        <section>
+          <h2>Metadata — today vs engines</h2>
+          <table>
+            <tr><th>Need</th><th>Tracker today</th><th>Airflow 3</th><th>Dagster</th></tr>
+            <tr><td>Per-step timing</td><td class="bad">❌ phase enum only</td><td class="good">✅ TaskInstance</td><td class="good">✅ op event log</td></tr>
+            <tr><td>Retry count</td><td class="mid">⚠ buried in JSONB</td><td class="good">✅ <code>try_number</code></td><td class="good">✅ RetryPolicy</td></tr>
+            <tr><td>Tokens / $ cost</td><td class="mid">⚠ in JSONB</td><td class="mid">⚠ XCom (untyped)</td><td class="good">✅ <code>MetadataValue</code></td></tr>
+            <tr><td>Parent-child correlation</td><td class="bad">❌ none</td><td class="mid">⚠ trigger string</td><td class="good">✅ tags + asset lineage</td></tr>
+            <tr><td>Error classification</td><td class="bad">❌ none</td><td class="mid">⚠ log string</td><td class="good">✅ hooks → tags</td></tr>
+            <tr><td>Asset lineage</td><td class="bad">❌ none</td><td class="mid">⚠ new &amp; maturing</td><td class="good">✅ native UI</td></tr>
+            <tr><td>Trend charts</td><td class="bad">❌ none</td><td class="mid">⚠ Grafana add-on</td><td class="good">✅ UI + GraphQL</td></tr>
+            <tr><td>Typed UI rendering</td><td class="bad">❌ flat strings</td><td class="mid">⚠ partial</td><td class="good">✅ first-class</td></tr>
+          </table>
+          <p class="smaller callout">The ask isn't "switch engines to get visibility." It's "capture the right fields first; then the engine (if we adopt one) renders them for free."</p>
+        </section>
+      </section>
+
+      <!-- ==================== METADATA — ENGINEERING ==================== -->
+      <section>
+        <section>
+          <h2>Metadata improvements — engineering</h2>
+          <p class="smaller">Five quick wins that ship in ~4 weeks, all of which land cleanly in Dagster later (as tags + <code>MetadataValue</code>). No orchestrator dependency.</p>
+          <table>
+            <tr><th>Sub-phase</th><th>Work</th><th>Effort</th></tr>
+            <tr><td><span class="phase-num">M1</span></td><td>Promote 6 fields to indexed DB columns</td><td>1 week</td></tr>
+            <tr><td><span class="phase-num">M2</span></td><td>Pydantic <code>JobEventData</code> shared schema + backfill</td><td>1 week</td></tr>
+            <tr><td><span class="phase-num">M3</span></td><td>Token + cost columns (LangSmith post-processor)</td><td>1 week</td></tr>
+            <tr><td><span class="phase-num">M4</span></td><td>Error classifier (regex map or Haiku hook)</td><td>3 days</td></tr>
+            <tr><td><span class="phase-num">M5</span></td><td>Materialized view + trend charts in UI</td><td>1 week</td></tr>
+          </table>
+          <p class="smaller good">Parallelizable with Dagster Phase 1. Engineering ships; orchestration ships; they converge in Phase 6.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">M1</span> New indexed columns</h2>
+          <pre><code class="language-sql">ALTER TABLE cloud_run_job_tracker
+  ADD COLUMN company_id          UUID,
+  ADD COLUMN team_id             UUID,
+  ADD COLUMN batch_index         INTEGER,
+  ADD COLUMN parent_execution_id TEXT,
+  ADD COLUMN retry_count         INTEGER DEFAULT 0,
+  ADD COLUMN error_class         TEXT;
+
+CREATE INDEX idx_crjt_company ON cloud_run_job_tracker(company_id);
+CREATE INDEX idx_crjt_team    ON cloud_run_job_tracker(team_id);
+CREATE INDEX idx_crjt_batch   ON cloud_run_job_tracker(batch_index)
+  WHERE batch_index IS NOT NULL;
+CREATE INDEX idx_crjt_parent  ON cloud_run_job_tracker(parent_execution_id)
+  WHERE parent_execution_id IS NOT NULL;
+CREATE INDEX idx_crjt_err     ON cloud_run_job_tracker(error_class)
+  WHERE error_class IS NOT NULL;</code></pre>
+          <p class="smaller">Backfill from existing <code>event_data</code> blob via a one-time script. Filters stop hitting JSONB text scans the moment indexes are built.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">M2</span> Typed event schema</h2>
+          <pre><code class="language-python">class JobEventData(BaseModel):
+    project_id: str
+    job_id: str
+    user_id: str
+    company_id: UUID
+    team_id: UUID | None = None
+    tech_spec_id: str | None = None
+    code_gen_id: str | None = None
+    batch_index: int | None = None
+    parent_execution_id: str | None = None
+    metadata: JobEventMetadata
+
+class JobEventMetadata(BaseModel):
+    lines_onboarded: int | None = None
+    files_onboarded: int | None = None
+    files_touched:   int | None = None
+    lines_added:     int | None = None
+    lines_edited:    int | None = None
+    lines_removed:   int | None = None
+    hours_saved:     float | None = None
+    percent_complete: float | None = None
+    tokens_input:    int | None = None
+    tokens_output:   int | None = None
+    cost_usd:        float | None = None
+    model_name:      str | None = None
+    pr_data:         dict | None = None
+    file_extensions: dict[str, int] | None = None</code></pre>
+          <p class="smaller">Shared in <code>blitzy-utils</code>. Jobs import &amp; validate; tracker ingestion validates. Fails fast in non-prod; warns in prod.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">M3</span> Tokens + cost columns</h2>
+          <pre><code class="language-sql">ALTER TABLE cloud_run_job_tracker
+  ADD COLUMN tokens_input  BIGINT,
+  ADD COLUMN tokens_output BIGINT,
+  ADD COLUMN cost_usd      NUMERIC(10, 4),
+  ADD COLUMN model_name    TEXT;</code></pre>
+          <p class="smaller">Populated by a LangSmith post-processor on <code>DONE</code> events — reads the trace, sums input/output tokens per model, applies current pricing.</p>
+          <ul class="tight smaller">
+            <li>Per-run cost visible in the job detail page</li>
+            <li>Per-company / per-day rollup on Sales dashboard</li>
+            <li>Feeds AI-Phase C's budget guardrail</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">M5</span> Time-series rollup</h2>
+          <pre><code class="language-sql">CREATE MATERIALIZED VIEW job_rollup_daily AS
+SELECT
+  date_trunc('day', created_at) AS day,
+  job_type, env_type, company_id,
+  count(*)                                        AS total_runs,
+  count(*) FILTER (WHERE job_status = 'SUCCESS')  AS successes,
+  count(*) FILTER (WHERE job_status = 'FAILED')   AS failures,
+  avg(EXTRACT(EPOCH FROM (updated_at - created_at)))  AS avg_duration_s,
+  percentile_cont(0.95) WITHIN GROUP (ORDER BY
+    EXTRACT(EPOCH FROM (updated_at - created_at)))    AS p95_duration_s,
+  sum(cost_usd)       AS total_cost_usd,
+  sum(tokens_input)   AS total_tokens_input,
+  sum(tokens_output)  AS total_tokens_output,
+  sum(retry_count)    AS total_retries
+FROM cloud_run_job_tracker
+GROUP BY 1, 2, 3, 4;</code></pre>
+          <p class="smaller">Refreshed hourly via APScheduler. Replaces hot-path aggregations recomputed per request. Feeds WoW trend charts in the UI.</p>
+        </section>
+
+        <section>
+          <h2>Each column maps cleanly to Dagster</h2>
+          <table>
+            <tr><th>Quick win</th><th>Dagster equivalent</th></tr>
+            <tr><td>Indexed columns (<code>company_id</code>, <code>batch_index</code>, …)</td><td><strong>Run tags</strong> — indexed, filterable in UI with no backend change</td></tr>
+            <tr><td>Token + cost columns</td><td><strong><code>MetadataValue.int() / .float()</code></strong> — rendered with currency formatting</td></tr>
+            <tr><td>Pydantic <code>JobEventData</code></td><td><strong>Op config</strong> — Pydantic-validated at run launch</td></tr>
+            <tr><td>Error classifier</td><td><strong><code>@failure_hook</code></strong> → <code>run_tags = {"ai.error_class": …}</code></td></tr>
+            <tr><td>Materialized rollup view</td><td><strong>GraphQL</strong> against event log — no precomputed view needed</td></tr>
+            <tr><td>Parent-child column</td><td><strong>Asset lineage</strong> — visible in the asset graph UI</td></tr>
+          </table>
+          <p class="smaller good"><strong>Not throwaway work.</strong> Every M1–M5 change is something Dagster encourages anyway; the migration just reshapes columns into tags and metadata values.</p>
+        </section>
+      </section>
+
+      <!-- ==================== DAGSTER VS AIRFLOW ==================== -->
+      <section>
+        <section>
+          <h2>Dagster vs Airflow 3 — core model</h2>
+          <p class="smaller">Airflow 3.0 (GA April 2025) narrowed the data-awareness gap. Dagster still leads, but the margin shrank — especially on scheduling and language support.</p>
+          <table>
+            <tr><th>Dimension</th><th>Dagster</th><th>Airflow 3</th></tr>
+            <tr><td>Core abstraction</td><td>Assets + ops</td><td>Tasks + <span class="good">Assets (new in 3.0)</span></td></tr>
+            <tr><td>Scheduling</td><td>Cron + sensors + asset freshness</td><td>Cron + sensors + <span class="good">data-aware asset scheduling</span></td></tr>
+            <tr><td>Language</td><td>Python only</td><td>Python + <span class="good">Task SDK: Go (GA), Java / R (roadmap)</span></td></tr>
+            <tr><td>Local dev</td><td><code>dagster dev</code> zero-infra</td><td>Still needs DB + scheduler + webserver</td></tr>
+            <tr><td>Testing</td><td>Plain Python ops</td><td>DAG test harness; <span class="good">stable authoring API</span></td></tr>
+            <tr><td>Remote execution</td><td>K8sRunLauncher + <code>k8s_job_op</code></td><td><span class="good">Edge Executor + Task SDK</span></td></tr>
+          </table>
+        </section>
+
+        <section>
+          <h2>Dagster vs Airflow 3 — ecosystem &amp; ops</h2>
+          <table>
+            <tr><th>Dimension</th><th>Dagster</th><th>Airflow 3</th></tr>
+            <tr><td>Typed I/O</td><td>I/O managers (any size)</td><td>Xcom (small only)</td></tr>
+            <tr><td>Operator catalog</td><td>Smaller, typed</td><td>Largest in OSS (80+ packages)</td></tr>
+            <tr><td>UI</td><td>React, run + asset views</td><td><span class="good">Fully rewritten React UI</span></td></tr>
+            <tr><td>DAG versioning</td><td>Code locations, hot reload</td><td><span class="good">Native DAG versioning</span></td></tr>
+            <tr><td>Branch / PR envs</td><td>Dagster+ Branch Deployments</td><td>Not built-in</td></tr>
+            <tr><td>SaaS</td><td>Dagster+ (Cloud / Hybrid)</td><td>Astronomer, MWAA, Cloud Composer</td></tr>
+            <tr><td>Community</td><td>Growing</td><td>Largest</td></tr>
+          </table>
+          <p class="smaller callout"><strong>Summary:</strong> Airflow 3 leads on catalog, versioning, and managed options. Dagster leads on data primitives (typed I/O, asset graph) and PR envs.</p>
+        </section>
+
+        <section>
+          <h2>Airflow 3 — what closed the gap</h2>
+          <ul class="tight smaller">
+            <li><strong>Asset-based scheduling</strong> — data-aware triggers, not just cron. Closes ~60% of Dagster's asset lead.</li>
+            <li><strong>Task SDK + Edge Executor</strong> — tasks run in any runtime; Go supported today, Java / R coming. Dagster is still Python-only.</li>
+            <li><strong>React UI rewrite</strong> — modernised from the Flask-era webserver; better run &amp; task drilldown.</li>
+            <li><strong>Stable DAG authoring interface</strong> — breaking changes now go through deprecation cycles.</li>
+            <li><strong>DAG Bundles</strong> — containerised DAG packaging, more Kubernetes-friendly.</li>
+            <li><strong>DAG versioning</strong> — git-like history tracking of DAG changes.</li>
+          </ul>
+          <p class="smaller callout"><strong>Still missing vs Dagster:</strong> typed I/O (Xcom is still the primary data-passing primitive), zero-infra local dev, Branch Deployments, asset lineage as UI-native (3.0 has assets but the lineage UI is still developing).</p>
+        </section>
+
+        <section>
+          <h2>Where each one wins</h2>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">Pick Dagster when…</h3>
+              <ul class="tight">
+                <li>Outputs (assets) matter more than task-schedules</li>
+                <li>Team lives in typed Python</li>
+                <li>You want lineage &amp; freshness as first-class</li>
+                <li>You need fast local iteration</li>
+                <li>Ephemeral per-PR envs are a goal</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="mid">Pick Airflow 3 when…</h3>
+              <ul class="tight">
+                <li>You need non-Python tasks (Go / Java / R) as first-class citizens</li>
+                <li>You need 20+ vendor operators out-of-the-box</li>
+                <li>Team has years of Airflow muscle memory</li>
+                <li>A managed service (MWAA / Astronomer / Composer) is mandated</li>
+                <li>Many DAGs are scheduled-batch, less data-centric</li>
+              </ul>
+            </div>
+          </div>
+          <p class="smaller callout">Applied to Blitzy: 7-node graph, GCP-native, 100% Python jobs, LLM tokens + %LOC are the important metrics, outputs are first-class (tech-spec, PR). Dagster fits; Airflow 3's multi-language win doesn't apply.</p>
+        </section>
+      </section>
+
+      <!-- ==================== ARGO WORKFLOWS ==================== -->
+      <section>
+        <section>
+          <h2>Argo Workflows — where it fits</h2>
+          <p class="smaller">Argo is a <strong>different category</strong> of tool: a Kubernetes-native workflow engine, not a data orchestrator. Every step is a container Pod; workflows are YAML CRDs.</p>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">Strengths</h3>
+              <ul class="tight">
+                <li>Purely k8s-native — just a controller, no control plane</li>
+                <li>Language-agnostic — any container is a step</li>
+                <li>Massive parallelism (thousands of concurrent workflows)</li>
+                <li>GitOps-friendly (YAML + Argo CD)</li>
+                <li>CNCF graduated; battle-tested (BlackRock, Intuit, Red Hat)</li>
+                <li>Argo Events for rich event-driven triggers</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="bad">Gaps for a data app</h3>
+              <ul class="tight">
+                <li>No assets, no lineage, no data-awareness</li>
+                <li>No typed I/O — outputs are artifact-repo URIs</li>
+                <li>YAML-heavy; hard to refactor</li>
+                <li>Minimal UI metadata — Gantt only</li>
+                <li>No Python-native testing; requires a k8s cluster</li>
+                <li>Fewer active contributors than Dagster / Airflow (2024-25)</li>
+                <li>No hooks primitive — AI triage would need a sidecar</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Argo Workflows vs Dagster</h2>
+          <table>
+            <tr><th>Dimension</th><th>Dagster</th><th>Argo Workflows</th></tr>
+            <tr><td>Abstraction</td><td>Assets + Python ops</td><td>Container DAGs in YAML</td></tr>
+            <tr><td>Language model</td><td>Python-first</td><td><span class="good">Language-agnostic (containers)</span></td></tr>
+            <tr><td>k8s coupling</td><td>Optional — runs anywhere</td><td><span class="good">k8s-only</span> (feature, not bug)</td></tr>
+            <tr><td>Data primitives</td><td>Assets, I/O managers, metadata</td><td>Files / artifact URIs</td></tr>
+            <tr><td>Typed I/O</td><td>Yes</td><td>No</td></tr>
+            <tr><td>UI richness</td><td>Asset graph + metadata + logs + metrics</td><td>DAG view + Gantt + Pod logs</td></tr>
+            <tr><td>Sensors / event triggers</td><td>Native</td><td>Via separate Argo Events project</td></tr>
+            <tr><td>Custom metadata (tokens, %LOC, $)</td><td>First-class <code>MetadataValue</code></td><td>Write to artifact repo; render externally</td></tr>
+            <tr><td>Operational cost</td><td>Control plane + Postgres</td><td>Just a controller Pod</td></tr>
+            <tr><td>AI hook primitive</td><td>Native <code>@failure_hook</code></td><td>Add a sidecar service</td></tr>
+            <tr><td>Ideal fit</td><td>Data / ML / AI platforms</td><td>Pure container pipelines (Kubeflow-style ML, CI-as-k8s, ETL containers)</td></tr>
+          </table>
+        </section>
+
+        <section>
+          <h2>Argo for Blitzy — the trade-off</h2>
+          <div class="callout smaller">
+            <p><strong>What we'd gain:</strong> a lighter operational footprint. No control plane. Every existing <code>archie-job-*</code> image becomes a step with zero wrapper code.</p>
+            <p><strong>What we'd lose:</strong></p>
+            <ul class="tight">
+              <li>The billing metadata story — no <code>MetadataValue</code>; we'd rebuild the UI layer that the tracker already has problems with</li>
+              <li>Asset lineage (tech-spec → code-graph → PR) — would live in external docs, not in the engine</li>
+              <li>LangSmith / token / %LOC observability — Argo has nothing equivalent</li>
+              <li>The AI-triage hook pattern — would require a sidecar microservice per workflow</li>
+              <li>Sales &amp; Engineer dashboards map naturally to Dagster's GraphQL; Argo's API is thinner</li>
+            </ul>
+          </div>
+          <p class="smaller">Argo would win if the jobs were pure container steps with no customer-facing metadata story. They're not — the <code>BillingReport</code> and <code>%LOC</code> fields are <em>the</em> value the platform surfaces.</p>
+        </section>
+      </section>
+
+      <!-- ==================== RANKED FOR BLITZY ==================== -->
+      <section>
+        <h2>Ranked for Blitzy</h2>
+        <table>
+          <tr><th>#</th><th>Tool</th><th>Why it ranks here</th></tr>
+          <tr>
+            <td><span class="good">1</span></td>
+            <td><strong>Dagster</strong></td>
+            <td>Asset model + typed metadata match the billing / %LOC signals; Python-only jobs; fast local dev; Branch Deployments for multi-env</td>
+          </tr>
+          <tr>
+            <td><span class="mid">2</span></td>
+            <td><strong>Airflow 3</strong></td>
+            <td>Closed much of the gap with assets + Task SDK; largest operator catalog; only beats Dagster if we need non-Python tasks (we don't today)</td>
+          </tr>
+          <tr>
+            <td><span class="bad">3</span></td>
+            <td><strong>Argo Workflows</strong></td>
+            <td>Great k8s pipeline engine, but weak data primitives; we'd rebuild the metadata/UI layer we're trying to simplify — net negative for Blitzy</td>
+          </tr>
+        </table>
+        <p class="smaller good">The user's prior bias (Dagster &gt; Airflow &gt; Argo) is <strong>correct for this workload</strong>. If we were a pure-container ML platform, the order would flip Argo &gt; Airflow &gt; Dagster — but we aren't.</p>
+        <p class="smaller callout"><strong>One caveat to the ranking:</strong> if Airflow 3.0's Task SDK matures into full Java / R support and we start onboarding non-Python jobs, the gap with Dagster narrows materially. Revisit in 12 months.</p>
+      </section>
+
+      <!-- ==================== MULTI-ENV DEPLOY ==================== -->
+      <section>
+        <section>
+          <h2>"Dagster is easier across dev/QA/stage" — true?</h2>
+          <p class="smaller">Investigated against our current setup (hardcoded <code>_DEV</code>, one workflow per repo).</p>
+          <p class="good smaller"><strong>Verdict:</strong> directionally true — not absolute.</p>
+        </section>
+
+        <section>
+          <h2>What's true</h2>
+          <ul class="tight smaller">
+            <li><strong>Resources are the env boundary.</strong> Per-env <code>Definitions</code> hold topics, buckets, creds. Ops are env-agnostic.</li>
+            <li><strong>Code locations + workspace.yaml</strong> run the same package against different env configs without forking.</li>
+            <li><strong>Dagster+ Branch Deployments</strong> give you full per-PR orchestration envs pointed at dev infra.</li>
+            <li><strong>Local = prod topology.</strong> <code>dagster dev</code> uses the same graph with mock resources.</li>
+            <li><strong>CI/CD is first-class.</strong> One deploy pipeline replaces seven GitHub Actions workflows.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Where it needs qualifiers</h2>
+          <ul class="tight smaller">
+            <li class="mid">"Easier" is relative — if Airflow is already running on Astronomer with per-env deployments, the gap narrows.</li>
+            <li class="mid">Branch Deployments are a <strong>Dagster+</strong> feature. OSS Dagster gives you cleaner multi-env than Airflow, but not the PR-preview magic.</li>
+            <li class="mid">Secrets management (Secret Manager / Vault) is identical work either way.</li>
+            <li class="mid">Workload isolation (namespaces, IAM) is still your job.</li>
+            <li class="mid">Migration cost: introducing a new control plane isn't free.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>Applied to Blitzy today</h2>
+          <div class="callout smaller">
+            <p>Current state: <code>environment: dev</code> hardcoded in every <code>.github/workflows/deploy-job.yml</code>. QA and staging are <strong>not wired</strong>.</p>
+            <p>With Dagster: single repo of <code>Definitions</code> + per-env resource file → bring QA and stage online without multiplying seven GitHub Actions workflows by three.</p>
+            <p class="good">The multi-env argument is stronger <em>because</em> we're starting from scratch on QA/stage.</p>
+          </div>
+        </section>
+      </section>
+
+      <!-- ==================== OTHER OPTIONS ==================== -->
+      <section>
+        <section>
+          <h2>Other options on the market</h2>
+          <table>
+            <tr><th>Tool</th><th>Model</th><th>Good for</th></tr>
+            <tr><td>Airflow</td><td>Task DAGs</td><td>Max connector catalog</td></tr>
+            <tr><td>Prefect 3</td><td>Pythonic flows</td><td>Managed, dynamic flows</td></tr>
+            <tr><td>Temporal</td><td>Durable workflows</td><td>Long-lived stateful app flows</td></tr>
+            <tr><td>Kestra</td><td>YAML / event-driven</td><td>JVM shops, event-native</td></tr>
+            <tr><td>Argo Workflows</td><td>k8s CRDs</td><td>See dedicated section → different category from Dagster/Airflow</td></tr>
+            <tr><td>Flyte</td><td>Typed Python, k8s</td><td>ML pipelines, caching</td></tr>
+            <tr><td>Step Functions / GCP Workflows</td><td>Cloud state machines</td><td>All-in on one cloud</td></tr>
+            <tr><td>Luigi</td><td>Python tasks</td><td>Simple legacy batch</td></tr>
+            <tr><td>Cloud Composer / MWAA / Astronomer</td><td>Managed Airflow</td><td>Airflow without running it</td></tr>
+          </table>
+          <p class="smaller good">Shortlist for us: Dagster &gt; Airflow 3 &gt; Argo (see ranked-for-Blitzy). Prefect and Step Functions are credible alternatives; Temporal is a complement, not a replacement.</p>
+        </section>
+      </section>
+
+      <!-- ==================== PHASED PLAN ==================== -->
+      <section>
+        <section>
+          <h2>Phased implementation plan</h2>
+          <p class="smaller">Start narrow — <code>archie-job-code-downloader</code> only — so we get a real demo in two weeks before committing to the full migration.</p>
+          <table class="phase-table">
+            <tr><th>Phase</th><th>Weeks</th><th>Scope</th><th>Exit criteria</th></tr>
+            <tr><td><span class="phase-num">1</span></td><td>1–2</td><td><code>code-downloader</code> only</td><td>First Dagster run in dev</td></tr>
+            <tr><td><span class="phase-num">2</span></td><td>3–4</td><td>+ <code>code-graph-generator</code></td><td>Batch fan-out in one run</td></tr>
+            <tr><td><span class="phase-num">3</span></td><td>5–6</td><td>+ reverse chain</td><td>Billing metadata live</td></tr>
+            <tr><td><span class="phase-num">4</span></td><td>7</td><td>+ <code>document-generator</code>, <code>code-generator</code></td><td>All jobs reachable</td></tr>
+            <tr><td><span class="phase-num">5</span></td><td>8</td><td>Native-op refactor of 1 job</td><td>Resource pattern validated</td></tr>
+            <tr><td><span class="phase-num">6</span></td><td>9–10</td><td>QA + stage + Branch Deploys</td><td>Multi-env working</td></tr>
+            <tr><td><span class="phase-num">7</span></td><td>11+</td><td>Cutover</td><td>Old deploy workflows retired</td></tr>
+          </table>
+          <p class="smaller">Assumes one engineer at ~60% allocation. Each phase ends with a demo-able milestone.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">1</span> Foundation + code-downloader PoC</h2>
+          <p class="subtitle smaller">Weeks 1–2 · first Dagster run in dev</p>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">Tasks</h3>
+              <ol class="tight">
+                <li>Bootstrap <code>blitzy-orchestration/</code> repo (Dagster 1.x, Python 3.12)</li>
+                <li>Skeleton <code>Definitions</code> + three resources (<code>PubSub</code>, <code>Storage</code>, <code>LangSmith</code>)</li>
+                <li>Wrap downloader as <code>k8s_job_op</code> — image unchanged</li>
+                <li><code>dagster dev</code> against dev GCP project</li>
+                <li>Parse <code>DONE</code> event → attach as run metadata</li>
+                <li>CI: validate code location on PRs</li>
+              </ol>
+            </div>
+            <div>
+              <h3 class="mid">Exit criteria ✅</h3>
+              <ul class="tight">
+                <li>Downloader runs end-to-end under Dagster</li>
+                <li><code>lines_onboarded</code>, <code>files_onboarded</code>, <code>file_extensions</code> visible on the run</li>
+                <li>Decision recorded: Dagster+ vs OSS Dagster</li>
+              </ul>
+              <h3 class="bad">Risks</h3>
+              <ul class="tight">
+                <li>Cloud Run → k8s parity (VPC, egress, SA, 24h timeout)</li>
+                <li>Pub/Sub subscriber contention in dev</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">1</span> What the code looks like</h2>
+          <pre><code class="language-python">from dagster import job, Definitions, ResourceDefinition
+from dagster_k8s import k8s_job_op
+
+download_code = k8s_job_op.configured({
+    "image": "us-east1-docker.pkg.dev/blitzy-os-dev/gcf-artifacts/"
+             "archie-job-code-downloader:latest",
+    "env_vars": [
+        "EVENT_DATA", "PROJECT_ID", "GCS_BUCKET_NAME",
+        "PRIVATE_BLOB_NAME", "PLATFORM_EVENTS_TOPIC",
+        "GRAPH_CODE_TOPIC", "GITHUB_SECRET_SERVER",
+        "SERVICE_URL_ADMIN", "NEO4J_SERVER",
+        # ... see env-contract.md
+    ],
+    "container_config": {
+        "resources": {"requests": {"cpu": "1", "memory": "16Gi"}}
+    },
+}, name="download_code")
+
+@job
+def archie_download_only():
+    download_code()
+
+defs = Definitions(jobs=[archie_download_only])</code></pre>
+          <p class="smaller good">Zero change to the job itself — Dagster just orchestrates.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">2</span> + code-graph-generator · Weeks 3–4</h2>
+          <ul class="tight smaller">
+            <li>Wrap code-graph as <code>k8s_job_op</code></li>
+            <li>Downloader's <code>batch_indexes</code> → <strong>dynamic outputs</strong> → one Pod per batch</li>
+            <li>Retire <code>are_other_batches_complete(...)</code> Neo4j check in favour of native fan-in</li>
+            <li>Add <code>@sensor</code> on <code>GRAPH_CODE_TOPIC</code> — same external triggers still work</li>
+            <li>Install first <code>RetryPolicy</code> to start retiring <code>@archie_exponential_retry</code></li>
+          </ul>
+          <p class="smaller callout"><strong>Risk:</strong> large repos = hundreds of batches. Set executor <code>max_concurrent</code> so we don't stampede GKE.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">3</span> Full reverse chain · Weeks 5–6</h2>
+          <ul class="tight smaller">
+            <li>Wrap reverse-file-mapper, reverse-thinker, reverse-code as <code>k8s_job_op</code>s</li>
+            <li>Phase-3 choice: <strong>keep</strong> internal per-OS k8s submit in reverse-thinker; revisit in Phase 5</li>
+            <li>Read <code>BillingReport</code> from GCS after reverse-code; attach every field as <code>MetadataValue</code></li>
+            <li>Promote outputs to <strong>assets</strong>: tech-spec, code-graph, repo-mapping, dependency-map, sorted-files, reverse-code-PR</li>
+            <li>First Grafana panel: lines-per-hour, tokens-per-PR, failures-by-stage</li>
+          </ul>
+          <p class="smaller good">End of Phase 3: the full reverse pipeline runs in one Dagster run, with every billing number on the UI.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">4</span> – <span class="phase-num">5</span> Remaining jobs &amp; native-op polish</h2>
+          <div class="two-col smaller">
+            <div>
+              <h3>Phase 4 · Week 7</h3>
+              <ul class="tight">
+                <li>Wrap <code>document-generator</code> (standalone)</li>
+                <li>Wrap <code>code-generator</code> (separate pipeline)</li>
+                <li>Add schedules / sensors per job type</li>
+                <li>Shared <code>common_resources.py</code> (LangSmith, LLM config)</li>
+              </ul>
+            </div>
+            <div>
+              <h3>Phase 5 · Week 8</h3>
+              <ul class="tight">
+                <li>Pick <code>code-generator</code> — simplest native-op candidate</li>
+                <li>Refactor <code>main.py</code> to accept resources as args</li>
+                <li>Drop module-level <code>os.environ[...]</code> reads</li>
+                <li>Replace <code>k8s_job_op</code> wrapper with an <code>@op</code></li>
+                <li>Validate memory / latency / retries</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">6</span> Multi-env wiring · Weeks 9–10</h2>
+          <p class="smaller">The phase that tests the headline claim hands-on.</p>
+          <ul class="tight smaller">
+            <li>Split into <code>defs_dev.py</code>, <code>defs_qa.py</code>, <code>defs_stage.py</code> — same ops, different resource bundle</li>
+            <li>Provision QA + stage infra (Pub/Sub topics, GCS buckets, IAM, Secret Manager) — <em>this is work regardless of engine</em></li>
+            <li>If on Dagster+: enable <strong>Branch Deployments</strong> pointed at dev infra</li>
+            <li>Kill the seven per-repo <code>deploy-job.yml</code> files; replace with one <code>deploy.yaml</code> in orchestration repo</li>
+          </ul>
+          <p class="smaller callout"><strong>Net effect:</strong> <code>gh actions</code> count drops from 7 × 3 envs = 21 potential workflows to 1 deploy pipeline with per-env config.</p>
+        </section>
+
+        <section>
+          <h2><span class="phase-num">7</span> Cutover · Week 11+</h2>
+          <ul class="tight smaller">
+            <li>Two-week dual-run: Dagster + existing Pub/Sub chain side-by-side, different topics, compared for correctness and latency</li>
+            <li>Flip upstream services' EVENT_DATA emission to point at Dagster sensor topics</li>
+            <li>Archive the per-repo <code>deploy-job.yml</code> workflows</li>
+            <li>Remove <code>@archie_exponential_retry</code> + <code>submit_kubernetes_job</code> where replaced</li>
+            <li>Publish the new on-call runbook</li>
+          </ul>
+          <p class="smaller good">Exit state: Dagster is the only orchestrator for <code>archie-job-*</code>.</p>
+        </section>
+
+        <section>
+          <h2>Out of scope on purpose</h2>
+          <ul class="tight smaller">
+            <li>Migrating LangSmith to a different tracing backend</li>
+            <li>Rewriting the LangGraph state machines <em>inside</em> each job — Dagster orchestrates <em>between</em> jobs</li>
+            <li>Replacing Pub/Sub for external subscribers — <code>PLATFORM_EVENTS_TOPIC</code> keeps emitting</li>
+          </ul>
+        </section>
+      </section>
+
+      <!-- ==================== AI-AUGMENTED OPS ==================== -->
+      <section>
+        <section>
+          <h2>AI-augmented operations</h2>
+          <p class="smaller">Once Dagster owns the events, AI plugs in trivially. Four use cases, one shared dependency — a <strong>failure triage classifier</strong>.</p>
+          <div class="ai-flow">
+            <div class="ai-node ai-node-dark"><span class="t">Run FAILED event</span></div>
+            <div class="ai-arrow">&#x2193;</div>
+            <div class="ai-node ai-node-cyan">
+              <span class="t">Triage LLM</span>
+              <span class="s">Haiku-class · ~$0.001 per failure</span>
+            </div>
+            <div class="ai-arrow">&#x2193;</div>
+            <div class="ai-node ai-node-green">
+              <span class="t">Structured tags</span>
+              <span class="s">error_class · is_transient · confidence · one_liner</span>
+            </div>
+            <div class="ai-fanout-arrows">
+              <div class="ai-arrow">&#x2193;</div>
+              <div class="ai-arrow">&#x2193;</div>
+              <div class="ai-arrow">&#x2193;</div>
+            </div>
+            <div class="ai-fanout">
+              <div class="ai-node ai-node-pale">
+                <span class="t">Smart notification</span>
+                <span class="s">grouped Slack alerts</span>
+              </div>
+              <div class="ai-node ai-node-pale">
+                <span class="t">Smart retrigger</span>
+                <span class="s">gated by confidence + budget</span>
+              </div>
+              <div class="ai-node ai-node-pale">
+                <span class="t">Auto-PR</span>
+                <span class="s">scoped safe-list of fixes</span>
+              </div>
+            </div>
+          </div>
+          <p class="smaller good">Build the classifier once. Notify / Retrigger / Auto-PR are thin consumers of its output.</p>
+        </section>
+
+        <section>
+          <h2>The menu</h2>
+          <table>
+            <tr><th>Use case</th><th>Lightweight</th><th>Mid-lift</th><th>Heavyweight</th></tr>
+            <tr>
+              <td><strong>Monitoring</strong></td>
+              <td>Triage LLM per failed run</td>
+              <td>Anomaly detection over metrics + token cost</td>
+              <td>SaaS AIOps (Datadog AI, NR AI)</td>
+            </tr>
+            <tr>
+              <td><strong>Notification</strong></td>
+              <td>LLM-rendered Slack message w/ links</td>
+              <td>Root-cause grouping across N failures</td>
+              <td>Rootly / incident.io</td>
+            </tr>
+            <tr>
+              <td><strong>Auto-PR</strong></td>
+              <td>Claude Code Action — draft PR from logs</td>
+              <td>Scoped agent (deps, timeouts, flaky tests)</td>
+              <td>Devin / Sweep / Copilot Workspace</td>
+            </tr>
+            <tr>
+              <td><strong>Retrigger</strong></td>
+              <td>Classifier gates retry</td>
+              <td>Adaptive backoff / resource sizing</td>
+              <td>Full ops agent</td>
+            </tr>
+          </table>
+          <p class="smaller">Start at the lightweight column. All four share the triage output.</p>
+        </section>
+
+        <section>
+          <h2>What fits our stack for free</h2>
+          <ul class="tight smaller">
+            <li><strong>Anthropic + OpenAI keys</strong> already in every job's env</li>
+            <li><strong>LangSmith</strong> traces — hook on downstream events</li>
+            <li><strong>Slack bot token</strong> already wired in GitHub Actions (<code>SLACK_BOT_TOKEN</code>)</li>
+            <li><strong>Dagster hooks / Airflow callbacks</strong> are the natural mount point</li>
+            <li><strong><code>BillingReport</code> metadata</strong> is already the signal an anomaly detector needs</li>
+          </ul>
+          <p class="smaller callout"><strong>Strategic angle:</strong> dogfood — <code>archie-job-reverse-code-generator</code> already generates PRs. Pointing it at our own infra repos for narrow-scope fixes is a direct product validation.</p>
+        </section>
+
+        <section>
+          <h2>The triage hook — keystone primitive</h2>
+          <pre><code class="language-python">@failure_hook(required_resource_keys={"anthropic"})
+def triage_failure(context):
+    logs = context.instance.all_logs(context.run_id, of_type="ERROR")
+    tail = "\n".join(e.message for e in logs[-200:])
+    resp = context.resources.anthropic.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=300,
+        system="Classify failure. JSON only: error_class, "
+               "is_transient, suspected_file, one_liner, confidence.",
+        messages=[{"role": "user", "content": tail}],
+    )
+    triage = json.loads(resp.content[0].text)
+    context.instance.add_run_tags(context.run_id, {
+        "ai.error_class":  triage["error_class"],
+        "ai.is_transient": str(triage["is_transient"]),
+    })</code></pre>
+          <p class="smaller good">~$0.001 per failure. Tags queryable in UI; every downstream consumer (notify, retrigger, auto-PR) reads the same fields.</p>
+        </section>
+
+        <section>
+          <h2>Smart retrigger — guardrails first</h2>
+          <p class="smaller">Retry <strong>only if all four</strong> are true:</p>
+          <ul class="tight smaller">
+            <li><code>ai.is_transient == true</code></li>
+            <li><code>retry_count &lt; 3</code></li>
+            <li><code>cumulative_cost_usd &lt; budget_cap</code> (per project)</li>
+            <li>Run is <strong>not</strong> tagged <code>expensive=true</code></li>
+          </ul>
+          <p class="smaller callout">Log every decision with reasoning; monitor for over-retry. Hard stop at <code>retry_count &gt;= 3</code> prevents feedback loops.</p>
+        </section>
+
+        <section>
+          <h2>Smart retrigger — sensor</h2>
+          <pre><code class="language-python">@sensor(job=archie_full_build)
+def auto_retrigger(context):
+    for run in context.instance.get_runs(
+        filters=RunsFilter(statuses=[DagsterRunStatus.FAILURE]),
+        limit=20,
+    ):
+        t = run.tags
+        if (t.get("ai.is_transient") == "True"
+            and int(t.get("retry_count", "0")) &lt; 3
+            and float(t.get("cumulative_cost_usd", "0")) &lt; 5.00
+            and "expensive" not in t):
+            yield RunRequest(
+                run_key=f"retry-{run.run_id}",
+                run_config=run.run_config,
+                tags={**t, "retry_count":
+                      str(int(t.get("retry_count", "0")) + 1)},
+            )</code></pre>
+        </section>
+
+        <section>
+          <h2>Auto-PR — narrow safe-list</h2>
+          <p class="smaller">Start with <strong>one class</strong> of fix. Expand only after seeing the false-positive rate.</p>
+          <div class="two-col smaller">
+            <div>
+              <h3 class="good">Safe to automate</h3>
+              <ul class="tight">
+                <li>Dependency version bumps (pinned)</li>
+                <li>Timeout / memory limit bumps</li>
+                <li>Env var typos (spelled wrong)</li>
+                <li>Missing secrets (add to Secret Manager ref)</li>
+                <li>Flaky-test quarantine (mark <code>skip</code>)</li>
+              </ul>
+            </div>
+            <div>
+              <h3 class="bad">Not safe to automate</h3>
+              <ul class="tight">
+                <li>Logic bugs in the job itself</li>
+                <li>Data-model changes</li>
+                <li>Anything touching billing / metering</li>
+                <li>Breaking-change dependency upgrades</li>
+                <li>Cross-repo refactors</li>
+              </ul>
+            </div>
+          </div>
+          <p class="smaller callout"><strong>Flow:</strong> Dagster webhook → Claude Code Action → <strong>draft</strong> PR → CODEOWNERS review → human merge. Never auto-merge.</p>
+        </section>
+
+        <section>
+          <h2>Smart notifications</h2>
+          <p class="smaller">Signal problem today: 10 FAILED events for the same Neo4j timeout look like 10 separate incidents.</p>
+          <ul class="tight smaller">
+            <li>Sensor collects failures in a rolling window (e.g. 5 min)</li>
+            <li>Groups by <code>ai.error_class</code> — post becomes <em>"8 × Neo4j timeout, 2 × LLM rate-limit"</em></li>
+            <li>Includes top-3 suspect lines, links to the runs</li>
+            <li>Always labelled <em>"AI-generated, verify before acting"</em></li>
+          </ul>
+          <pre><code class="language-python">grouped = defaultdict(list)
+for r in recent_failures:
+    grouped[r.tags.get("ai.error_class", "unknown")].append(r)
+
+msg = "\n".join(
+    f"• *{k}* × {len(v)} — {v[0].run_id[:8]}"
+    for k, v in sorted(grouped.items(), key=lambda x: -len(x[1]))
+)</code></pre>
+        </section>
+
+        <section>
+          <h2>Risks &amp; guardrails</h2>
+          <table>
+            <tr><th>Risk</th><th>Guardrail</th></tr>
+            <tr><td>Auto-retrigger burns LLM budget</td><td><code>max_cost_per_run_chain</code> tag; hard cap per project per day</td></tr>
+            <tr><td>Auto-PR spam</td><td>≤N PRs / repo / day; draft status always; CODEOWNERS required</td></tr>
+            <tr><td>Hallucinated root causes</td><td>Link to raw trace; <em>"AI-generated, verify"</em> label; confidence threshold</td></tr>
+            <tr><td>Vendor lock-in (SaaS AIOps)</td><td>Build in-house first; promote only once signal is proven</td></tr>
+            <tr><td>PII / secrets in LLM context</td><td>Scrub known patterns before sending; use models with zero-data-retention</td></tr>
+            <tr><td>Feedback loop bugs (AI → retrigger → fail → AI…)</td><td>Hard stop after <code>retry_count &gt;= 3</code>; weekly audit of decisions</td></tr>
+          </table>
+        </section>
+
+        <section>
+          <h2>Phased AI rollout (post-Phase 7)</h2>
+          <table class="phase-table">
+            <tr><th>AI-Phase</th><th>Scope</th><th>Exit criteria</th></tr>
+            <tr><td><span class="phase-num">A</span></td><td>Triage hook on failed runs</td><td>Structured metadata on ≥80% of failures</td></tr>
+            <tr><td><span class="phase-num">B</span></td><td>Smart Slack notifications</td><td>Grouped alerts; oncall satisfaction ↑</td></tr>
+            <tr><td><span class="phase-num">C</span></td><td>Auto-retrigger (transient only)</td><td>≥30% of failures auto-resolved; zero runaway-cost incidents</td></tr>
+            <tr><td><span class="phase-num">D</span></td><td>Auto-PR for one safe-list class</td><td>&lt;10% false-positive rate on draft PRs</td></tr>
+            <tr><td><span class="phase-num">E</span></td><td>Anomaly detection on token / %LOC / duration trends</td><td>Weekly rollup in Slack; catches ≥1 real regression</td></tr>
+          </table>
+          <p class="smaller good">AI-Phase A alone unlocks 80% of the value. Everything else is incremental.</p>
+        </section>
+      </section>
+
+      <!-- ==================== NEXT STEPS ==================== -->
+      <section>
+        <h2>Next steps</h2>
+        <ol class="tight">
+          <li><strong>Approve the phased plan</strong> — Phase 1 is tightly scoped to <code>code-downloader</code> for fast signal</li>
+          <li><strong>Pick a PoC owner</strong> and open the <code>blitzy-orchestration</code> repo</li>
+          <li><strong>Decide Dagster+ vs OSS Dagster</strong> before Phase 1 ends (Branch Deployments = biggest multi-env lever)</li>
+          <li><strong>Phase 1 exit review</strong> — demo against dev, then commit to Phase 2 or revisit</li>
+          <li><strong>AI-Phase A spike</strong> — one week to stand up the triage hook; low risk, high leverage</li>
+        </ol>
+      </section>
+
+      <!-- ==================== APPENDIX ==================== -->
+      <section>
+        <section>
+          <h2>Appendix — current env contract</h2>
+          <ul class="tiny tight">
+            <li><code>EVENT_DATA</code>, <code>PROJECT_ID</code>, <code>GCS_BUCKET_NAME</code> — all jobs</li>
+            <li><code>PLATFORM_EVENTS_TOPIC</code>, <code>GRAPH_CODE_TOPIC</code>, <code>GENERATE_*_TOPIC</code> — per-job topic list</li>
+            <li><code>NEO4J_SERVER / USERNAME / PASSWORD</code> — graph-aware jobs</li>
+            <li><code>GITHUB_SECRET_SERVER</code> — repo-fetching jobs</li>
+            <li><code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, <code>GOOGLE_API_KEY</code>, <code>VOYAGE_API_KEY</code> — LLM jobs</li>
+            <li><code>LANGSMITH_*</code> / <code>LANGCHAIN_*</code>, <code>TOKENIZERS_PARALLELISM</code> — LLM jobs</li>
+          </ul>
+          <p class="tiny">All of these become typed Dagster resources or run-config fields, not scattered env sets.</p>
+        </section>
+
+        <section class="title-slide">
+          <h2>Thanks</h2>
+          <p class="subtitle">Questions?</p>
+          <p class="tiny">Full plan: <code>PLAN.md</code> · Context for continuation: <code>dagster_blitzy_job/</code></p>
+        </section>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/highlight/highlight.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5/plugin/notes/notes.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      themeVariables: { fontSize: '26px' },
+      sequence: { useMaxWidth: true, wrap: true, mirrorActors: false, actorMargin: 70, boxMargin: 12, messageMargin: 32, actorFontSize: 13, noteFontSize: 12, messageFontSize: 12 },
+      flowchart: { useMaxWidth: false, htmlLabels: true, nodeSpacing: 65, rankSpacing: 80, padding: 40, diagramPadding: 25 }
+    });
+
+    Reveal.initialize({
+      hash: true,
+      slideNumber: 'c/t',
+      transition: 'slide',
+      plugins: [RevealHighlight, RevealNotes]
+    });
+
+    // Render mermaid diagrams after slide transitions so reveal.js sizes them correctly
+    const renderMermaidIn = (slide) => {
+      slide.querySelectorAll('.mermaid:not([data-processed="true"])').forEach((el, idx) => {
+        const src = el.textContent.trim();
+        const id = 'mermaid-' + Date.now() + '-' + idx;
+        mermaid.render(id, src).then(({ svg }) => {
+          el.innerHTML = svg;
+          el.setAttribute('data-processed', 'true');
+        }).catch((err) => {
+          el.innerHTML = '<pre style="color:#ff6b6b">' + (err.message || err) + '</pre>';
+        });
+      });
+    };
+    Reveal.on('ready',        e => renderMermaidIn(e.currentSlide));
+    Reveal.on('slidechanged', e => renderMermaidIn(e.currentSlide));
+  </script>
+</body>
+</html>
